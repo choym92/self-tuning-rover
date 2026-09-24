@@ -1,3 +1,5 @@
+> Research snapshot written 2026-09-23. Not maintained; current decisions are in [../decisions.md](../decisions.md) and current parts in [../build-spec.md](../build-spec.md).
+
 # NVIDIA Jetson Orin Nano Developer Kit — Official Documentation Review
 
 Research pass over NVIDIA's official Jetson Orin Nano Developer Kit User Guide ("latest" = JetPack 7.2.1) plus the JetPack 6.2.1 / L4T r36.4.4 Jetson Linux Developer Guide pages it links to. Goal: check the plan to move our JetPack 6.2.1 install from a 64GB microSD to a 512GB NVMe (T-FORCE G50, M.2 2280) **without an Ubuntu host**, by writing the same JetPack 6.2.1 SD card image to `/dev/nvme0n1`, hand-editing `extlinux.conf` and `nv_boot_control.conf`, then booting from NVMe and running `apt full-upgrade`.

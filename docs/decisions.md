@@ -62,7 +62,7 @@ Why the board ships with JetPack 6 firmware: the firmware was built 2025-09-18 (
 
 Reverses the "stay on microSD" decision made earlier the same day (kept below for the record).
 
-- The NVIDIA devkit guide (`../research/nvidia-user-guide.md`) has no JetPack 6 + NVMe path without an Ubuntu host. The method used is a community one: write the same SD image to the NVMe, change `root=` in the SSD copy's `extlinux.conf`, set `TEGRA_BOOT_STORAGE` to match. "Undocumented" means higher risk to be managed, not a ban.
+- The NVIDIA devkit guide (`reference/2026-09-23-nvidia-devkit-guide-review.md`) has no JetPack 6 + NVMe path without an Ubuntu host. The method used is a community one: write the same SD image to the NVMe, change `root=` in the SSD copy's `extlinux.conf`, set `TEGRA_BOOT_STORAGE` to match. "Undocumented" means higher risk to be managed, not a ban.
 - Why it is acceptable — the L4T code shipped *in the image itself* handles NVMe root (all read on the device, see `preflight.md`):
   - The initrd `init` script has an explicit `root=/dev/nvme*` branch: loads the PCIe and `nvme` modules, waits up to 10 s for the device node, mounts it.
   - `nvresizefs.sh` (first-boot partition resize) explicitly accepts `/dev/nvme*` root devices.
@@ -99,3 +99,36 @@ Reverses the "stay on microSD" decision made earlier the same day (kept below fo
 - Manual exposure is documented only for BRIO 4K / MX Brio; unconfirmed for Brio 100 → check with `v4l2-ctl --list-ctrls` on arrival.
 - If it fails, the design still holds: the main measurement is AprilTag (black and white, robust to lighting).
 - Fallback order: fix the lighting → AprilTag only → switch to C922.
+
+## Robot base: wheeled, built from parts — no Roomba (2026-09-24)
+
+- Paul's call: a parts build with wheels. Reasons: a used Roomba or a stair-climbing consumer robot makes it hard to swap in the Jetson as the brain, and the point of the project is to own the sensor → filter → control chain.
+- Consequence: the parts list needs a chassis, two motors with **quadrature encoders**, a motor driver, a microcontroller for the 50–100 Hz wheel loop, and a battery + DC-DC converter for the Jetson. Candidates in `reference/2026-09-22-parts-build-bom.md`; the choice is the next decision.
+
+## Camera alternatives considered before the D436 pick (2026-09-24)
+
+Criteria in order: depth accuracy at 0.3–3 m indoors; a global-shutter RGB image while the robot moves (AprilTag pose is the core measurement); IMU with synchronized timestamps; SDK, ROS 2 and community depth. "Newest" is not a criterion.
+
+| Camera | Price seen | Why not |
+|---|---|---|
+| D435i | $334 | rolling-shutter RGB (most community precedent, Isaac ROS-listed — the safe alternative) |
+| D436 | $354 | **picked**: same depth engine, global-shutter RGB matched to the depth FOV, IMU; risks = 1 MP RGB (use 20–25 cm tags), 2026 product with little precedent, not yet on the Isaac ROS list |
+| D455 | ~$420 | 0.6 m minimum range — blind to near obstacles indoors |
+| Stereolabs ZED 2i | $499 | computes depth on the Jetson GPU (competes with on-robot models), rolling shutter, proprietary SDK; ZED X is global shutter but needs a GMSL capture card |
+| Orbbec Gemini 336 | ~$300 | IMU + IR-pass filter and cheaper, but a smaller ecosystem and no Isaac ROS listing |
+
+Sources: store.realsenseai.com product pages, stereolabs.com, OpenELAB Orbbec-vs-RealSense comparisons, Isaac ROS forum threads (all read 2026-09-24).
+
+## Voice input/output: far-field USB mic array, local STT/TTS (2026-09-24, planned)
+
+- Hardware: **Seeed reSpeaker XVF3800 USB mic array** (4 mics, XMOS DSP: beamforming, noise suppression, acoustic echo cancellation, direction of arrival up to ~5 m, USB Audio Class = no driver) plus a small speaker. Chosen over conference speakerphones (Jabra Speak 510, Anker PowerConf S3) because of motor/fan noise next to the mic, 2–3 m talking distance, hearing while the robot speaks (AEC), and DoA so the robot can turn toward the speaker. Price to be checked at purchase.
+- Software, all local on the Orin Nano Super (2026 write-ups exist for this exact board): whisper.cpp with CUDA or faster-whisper for speech-to-text (≈1–2 s for 20 s of audio), Piper for text-to-speech (sub-second), optionally a small local LLM through Ollama for command understanding.
+- Order: after the camera and the base.
+
+## On-robot LLM: size before novelty (2026-09-24, planned)
+
+- The 8 GB is shared by CPU and GPU (5.4 GB free with the desktop up) and decode speed is bound by memory bandwidth (102 GB/s), so 2–4B-parameter models at 4-bit are the ceiling if YOLO and Whisper run alongside; 4B-class models fail under concurrent requests on this board; 7–9B models run alone only.
+- Candidates as of 2026-09: **Qwen3.5-4B** (3.4 GB via Ollama, text + image input, tool calling, multilingual incl. Korean) first; Gemma 4 E2B (3.6 GB, 25.5 tok/s measured on the Orin Nano GPU) second; Nemotron 3 Nano 4B (NVIDIA, Jetson AI Lab-listed) third. GLM family models are server-class and do not fit. Re-research at install time; this changes monthly.
+- Ollama on Jetson: a plain install has been reported to miss the GPU (JetPack 6 CUDA library path); use the Jetson AI Lab Ollama tutorial (container method). llama.cpp or MLC are faster when needed.
+- Jev (TypeSafe AI, released 2026-09-15): a hosted "decision model" that returns calibrated probabilities/scores/choices, not text; very cheap but API-only, early access, one week old. Not for the on-robot loop; a possible candidate for Mac-side auto-labelling later. Watch only.
+- Training and the LLM tuning loop stay on the Mac or cloud; the Jetson GPU is for real-time inference.

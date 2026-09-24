@@ -25,6 +25,18 @@ Ground truth comes from AprilTags at surveyed positions; they are scaffolding, r
 - **Camera software ready.** librealsense 2.58.4 built with the RSUSB backend so the camera IMU works on the JetPack 6 kernel (which ships without HID sensor drivers); `pyrealsense2` importable in `~/venvs/robot`. The camera itself (RealSense D436) is not bought yet.
 - **Not started.** Robot base (wheeled, built from parts with encoder motors), WiFi card, logging, AprilTag, filter, controller, replay harness.
 
+## Next steps
+
+| Buy | Then, when it arrives |
+|---|---|
+| RealSense D436 (official store) | Plug into a USB 3 port → `rs-enumerate-devices` → depth + RGB streams → **IMU at 200 Hz for 10 min with no frame drops** (Route A; else Route B in decisions.md) → Depth Quality Tool → first recorded `.bag` |
+| Waveshare AC8265 WiFi (Amazon) | Power off, remove the module, seat the card and antennas, reassemble → `nmcli device wifi connect` → DHCP reservation on the router → SSH alias |
+| USB-C data cable | Test `ssh paulcho@192.168.55.1` over the cable once; keep it in the kit as the no-network lifeline |
+| Base parts (chassis, 2 encoder motors, driver, microcontroller, battery, DC-DC) — after choosing from `docs/reference/2026-09-22-parts-build-bom.md` | Motor spin test → encoder counts per revolution → 1 m push test (see verify.md) |
+| reSpeaker XVF3800 + small speaker — later | whisper.cpp / Piper bring-up |
+
+Software order after the camera works: timestamped logging → AprilTag range/bearing → Kalman filter → wheel PID → Mac replay harness → tuning loop.
+
 ## What is in this repository
 
 | Path | Contents |
@@ -33,8 +45,8 @@ Ground truth comes from AprilTags at surveyed positions; they are scaffolding, r
 | [docs/decisions.md](docs/decisions.md) | Decisions and their reasons, hardest-to-reverse first |
 | [docs/preflight.md](docs/preflight.md) | Checks written *before* each device-changing step: official sources, device facts, VERIFIED vs INFERENCE, fallback |
 | [docs/verify.md](docs/verify.md) | Per-layer verification procedures and the measured values |
-| [docs/build-spec.md](docs/build-spec.md) | Parts, SKUs, prices |
-| [research/](research/) | Research notes (camera, Jetson, platforms, community, DIY BOM, software plan); `sentdex/` has notes on 21 videos. Written in Korean; translation pending |
+| [docs/build-spec.md](docs/build-spec.md) | Parts, SKUs, prices — actual purchases separated from plans |
+| [docs/reference/](docs/reference/) | Dated research snapshots kept for reuse: NVIDIA devkit guide review (2026-09-23), parts-build BOM (2026-09-22), software plan (2026-09-22). Not maintained; decisions.md is current |
 | [scripts/](scripts/) | Guarded scripts: microSD flashing from a Mac, NVMe install on the Jetson |
 | [jetson/](jetson/) | Code that runs on the robot (`requirements.txt` documents the Python environment) |
 | [tools/](tools/) | Replay, scoring and tuning tools that run on the Mac (empty for now) |

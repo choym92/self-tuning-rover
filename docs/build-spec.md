@@ -28,7 +28,7 @@ Prices as of 2026-09-22/24. Reasons in [decisions.md](decisions.md). Only the Mi
 
 ## Planned — after choosing the robot base (wheeled, built from parts)
 
-Base research: [../research/roomba-route.md](../research/roomba-route.md) (rejected: no Roomba), [../research/bom-diy.md](../research/bom-diy.md).
+Base research: [reference/2026-09-22-parts-build-bom.md](reference/2026-09-22-parts-build-bom.md). The Roomba route was researched and rejected; those notes live in git history (commit 7cb3348, research/roomba-route.md).
 
 - Chassis, two motors with **quadrature encoders**, motor driver, battery
 - Microcontroller (e.g. Arduino Nano Every) for encoder counting and wheel PID at 50–100 Hz

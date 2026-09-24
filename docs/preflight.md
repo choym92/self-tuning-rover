@@ -40,7 +40,7 @@ Outcome:
 
 Goal: boot JetPack 6.2.1 from the 512 GB NVMe instead of the microSD, without an Ubuntu host.
 
-Official source(s): the NVIDIA devkit guide (`../research/nvidia-user-guide.md`) documents NVMe only via the JetPack 7.2+ ISO installer, SDK Manager (Ubuntu host) or `l4t_initrd_flash.sh` (Ubuntu host). The method below (write the SD image to NVMe, edit the SSD copy's boot config) is a **community method**. The evidence that it is sound comes from the L4T scripts shipped inside the image, read on the device (paths below).
+Official source(s): the NVIDIA devkit guide (`reference/2026-09-23-nvidia-devkit-guide-review.md`) documents NVMe only via the JetPack 7.2+ ISO installer, SDK Manager (Ubuntu host) or `l4t_initrd_flash.sh` (Ubuntu host). The method below (write the SD image to NVMe, edit the SSD copy's boot config) is a **community method**. The evidence that it is sound comes from the L4T scripts shipped inside the image, read on the device (paths below).
 
 Known-issues search: community reports of JetPack 6.2 NVMe boot failures with `root=PARTUUID=...` after initrd flash ("can't find PARTUUID"); our `extlinux.conf` uses a device path (`/dev/nvme0n1p1`), which the initrd handles by a separate branch (see table).
 
