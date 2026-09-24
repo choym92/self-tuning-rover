@@ -91,6 +91,7 @@ Reverses the "stay on microSD" decision made earlier the same day (kept below fo
 
 - The dev kit ships with **no WiFi card and no antennas**.
 - Chose Waveshare AC8265 (lists Orin Nano/NX, antennas included). Intel 8265NGW chip.
+- *2026-09-24 check:* JetPack 6.x kernels do not ship the Intel `iwlwifi` driver (rfkill built-in/module mismatch reported on JP6.2; JP6.2.1 users see the card in `lspci` but no adapter). Working fix reported for the AC8265 on JP6.2.1: `sudo apt install backport-iwlwifi-dkms` over Ethernet, then reboot; one report of slower WiFi start-up with the dkms backport. The AX210 (WiFi 6E) needs the same backport plus has microcode-error and roaming-capability reports on JP6.2.1, so the 8265 stays the pick. Verify on our Jetson before the card arrives: `modinfo iwlwifi`, `ls /lib/firmware/iwlwifi-8265*`.
 - In-store USB adapters were mostly Realtek, which often need an out-of-tree Linux driver build → avoided.
 - Initial setup over wired Ethernet.
 

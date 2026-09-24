@@ -21,8 +21,8 @@ Prices as of 2026-09-22/24. Reasons in [decisions.md](decisions.md). Only the Mi
 | RealSense D435if (IMU + IR-pass filter) | store.realsenseai.com | $354.00 | Alternative — was the pick before the D436 check |
 | RealSense D435i (IMU) | store.realsenseai.com | $334.00 | Alternative — most community precedent, rolling-shutter RGB |
 | ~~RealSense D435i on Amazon~~ | Amazon | $409.99 used / $499–519 new | Dropped — the official store is cheaper |
-| Waveshare AC8265 WiFi module (listing names Orin Nano/NX, antennas included) | Amazon | $28.99 | Planned — buy with the camera |
-| USB-C data cable (Mac ↔ Jetson USB-C port) | any | ~$10 | Planned — gives SSH and a serial console with no display or network (see setup-log, L4T-README) |
+| Waveshare AC8265 WiFi module (Intel 8265, WiFi 5 + BT 4.2; listing names Orin Nano/NX, antennas included) | Amazon | $28.99 | Planned. **Not plug-and-play on JetPack 6**: the JP6.2.1 kernel ships no `iwlwifi`; fix reported = `sudo apt install backport-iwlwifi-dkms` over Ethernet (NVIDIA forum, 2025-08-30). Same driver situation for AX210, which has extra microcode/roaming reports → stay with the 8265 |
+| USB-C data cable (Mac ↔ Jetson USB-C port) | Amazon (Silkland 4 ft, USB-IF certified) | $15.96 | Planned — any USB-C data cable works; gives SSH and a serial console with no display or network (see setup-log, L4T-README) |
 | Logitech Brio 100 webcam | Micro Center / Amazon | $35.99 | Optional — the D436's RGB stream covers it; only if a second, cheap camera is wanted |
 | Seeed reSpeaker XVF3800 USB mic array (+ small speaker) | Seeed / Amazon | to be checked | Later — voice step; chosen over conference speakerphones for beamforming, AEC and direction-of-arrival |
 
