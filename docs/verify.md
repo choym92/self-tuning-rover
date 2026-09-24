@@ -29,7 +29,7 @@ Record measured values here with dates.
 | RealSense Python wheel for this board | PyPI JSON for `pyrealsense2` | aarch64 + cp310 wheel exists | **pass** — 2.58.4.10922 manylinux2014_aarch64 cp310 (2026-09-23) |
 | pip on the Jetson | `python3 -m pip --version` | installed | **missing** — needs `sudo apt install python3-pip python3-venv` |
 | Webcam exposure control | `v4l2-ctl --list-ctrls -d /dev/video0` | `exposure_absolute` or `exposure_time_absolute` present | |
-| LLM speed | Run a small model | Llama 3.2 3B ≈ 43 tok/s (Jetson AI Lab) | |
+| LLM speed | Run a small model | Llama 3.2 3B: 43.1 tok/s in Super mode, MLC INT4 (NVIDIA JetPack 6.2 blog, 2025-01-16); ~30 tok/s for 3B models via ollama Q4 (community, 2026) | |
 
 ## The most important habit
 
@@ -52,7 +52,7 @@ Log sensor values **to CSV with timestamps**, so filter tuning can be repeated o
 | pyrealsense2 import | `~/venvs/robot/bin/python -c "import pyrealsense2 as rs; print(rs.__version__)"` | 2.58.4; 0 devices (no camera yet) |
 | Screen blanking | `gsettings get org.gnome.desktop.session idle-delay` | 0 (disabled; see setup-log for why) |
 
-Pending checks: D435if detection + IMU streams on kernel 5.15.148-tegra (when the camera arrives); WiFi card (AC8265) link-up; SD reinsert behaviour of `BootOrder` (not tested — never insert both).
+Pending checks: D436 detection + IMU streams on kernel 5.15.148-tegra (when the camera arrives; D436 replaced the D435if as the pick on 2026-09-24); WiFi card (AC8265) link-up; SD reinsert behaviour of `BootOrder` (not tested — never insert both).
 
 ## RealSense software path without a camera (2026-09-24) — pass
 

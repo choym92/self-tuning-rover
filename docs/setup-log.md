@@ -42,6 +42,7 @@ Image:
 - File: `jetson-orin-nano-devkit-super-SD-image_JP6.2.1.zip`
 - Source: `developer.download.nvidia.com/embedded/L4T/r36_Release_v4.4/`
 - Linked from the JetPack SDK 6.2.2 page: "Use the SD card image of JetPack 6.2.1 / Jetson Linux 36.4.4 and APT upgrade to JetPack 6.2.2 / Jetson Linux 36.5."
+  - *Note added 2026-09-24:* our `apt upgrade` used the image's preconfigured `r36.4` repository and landed on Jetson Linux **36.4.7** (a JetPack 6.2.1 point update), not 36.5 (JetPack 6.2.2). Moving to 36.5 would mean switching the apt source to `r36.5`; not needed now.
 
 ### Install steps
 
@@ -191,3 +192,10 @@ Why: NVIDIA forum threads report that RealSense IMU models (D435i/D455/D436) los
 ### Note added 2026-09-24 01:10 — second route for the IMU, and an RSUSB caveat
 
 Further reading after the RSUSB build: (1) librealsense issue #13020 (June 2024, JP6.0, SDK 2.55.1, Orin NX + D455) reports 80% RGB frame drops and crashes when the IMU is enabled under the RSUSB backend, unresolved — older SDK/JetPack than ours, but it means Route A must be tested for frame drops, not assumed. (2) JetsonHacks `jetson-orin-librealsense` ships prebuilt kernel modules (UVC/HID patches, incl. HID sensor support) for JP6.2 / L4T 36.4.3 / kernel 5.15.148-tegra — our kernel version string, but built against 36.4.3, so loading on 36.4.7 is unverified. (3) A May 2026 write-up (JP6.2.2, D455) built `HID_SENSOR_HUB/ACCEL_3D/GYRO_3D` modules from source (~37 min), installed six `.ko` files, and got a clean 200 Hz IMU with the native backend. Recorded in `decisions.md` as Route B. Sources: https://github.com/realsenseai/librealsense/issues/13020 , https://github.com/jetsonhacks/jetson-orin-librealsense , https://danieljordanviraytech.substack.com/p/getting-the-realsense-d455-imu-working
+
+### Reference read 2026-09-24 — the `L4T-README` files (mounted at `/media/paulcho/L4T-README` from `/opt/nvidia/l4t-usb-device-mode/filesystem.img`)
+
+- **USB device mode** (`README-usb-dev-mode.txt`): the USB-C port, when cabled to a computer, exposes three things at once — a USB network (Jetson `192.168.55.1`, host gets `192.168.55.100` by DHCP; on a Mac the NCM interface works without drivers → `ssh paulcho@192.168.55.1`), a serial console (`/dev/tty.usbmodem*` on the Mac, any baud, `screen` works → login prompt without display or network), and this read-only README disk. This is the no-display, no-network lifeline for the robot; a plain USB-C data cable to the Mac is enough. The service `nv-l4t-usb-device-mode` can be stopped/disabled if the port is ever needed for something else.
+- **WiFi** (`README-wifi.txt`): NetworkManager is preinstalled; `sudo nmcli device wifi connect 'SSID' password 'PASSWORD'` from SSH, or the desktop icon. Nothing about installing a card — the AC8265 (Intel 8265) uses the in-kernel `iwlwifi` driver.
+- **VNC** (`README-vnc.txt`): `vino` server, five `gsettings` lines, reboot; only runs after a local login unless auto-login is enabled; without a monitor the desktop defaults to 640×480 unless `/etc/X11/xorg.conf` gets a `Virtual` resolution. Option for running GUI tools (RealSense Depth Quality Tool) once the robot has no monitor; for the camera bring-up, keeping the monitor attached is simpler.
+- `version/`: copy of `/etc/nv_tegra_release` and the `nvidia-l4t-core` package status (R36.4.7).

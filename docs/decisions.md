@@ -14,15 +14,15 @@ Hardest-to-reverse first. For answering "why did we do this?" later.
 ## Install JetPack 6.x, not 7.2.1 (2026-09-23)
 
 1. Board firmware is 36.4.7 → **JetPack 6 generation**. It matches as-is; no firmware change needed.
-2. Most RealSense D435i success reports are on JetPack 6; there are instability reports on JetPack 7.
-3. Isaac ROS targets JetPack 6.
-4. Super mode is supported from JetPack 6.1 → no performance loss.
+2. Most RealSense D435i success reports are on JetPack 6; there are instability reports on JetPack 7 (community forum/GitHub reports, 2025–2026; no first-party statement either way).
+3. Isaac ROS 3.x targeted JetPack 6 when this was written. *Audit 2026-09-24:* Isaac ROS 4.6 (2026) moved its supported stack to JetPack 7.2 + ROS 2 Jazzy — see the re-check below.
+4. Super mode is supported from **JetPack 6.2** (NVIDIA blog "JetPack 6.2 Brings Super Mode…", 2025-01-16) → no performance loss on 6.2.1. *(Audit 2026-09-24: an earlier draft said 6.1; corrected.)*
 5. **Asymmetric reversibility**: installing 7 moves the firmware to the 7 generation; going back to 6 requires re-flashing from an Ubuntu host. Online downgrade is not supported.
 
-Why the board ships with JetPack 6 firmware: the firmware was built in September 2025; JetPack 7.2.1 for Orin Nano came out in August 2026. The hardware is current — only the factory software predates JetPack 7.
+Why the board ships with JetPack 6 firmware: the firmware was built 2025-09-18 (read from the board). JetPack 7.2 (2026-06) was the first 7.x release to cover the Orin Nano, and JetPack 7.2.1 followed on 2026-08-12 (JetsonHacks release note; NVIDIA JetPack archive). The hardware is current — only the factory software predates JetPack 7.
 
 **Update (same day)**: there is a **Windows** PC at home.
-- SDK Manager runs on Windows through WSL2, but NVIDIA's official Windows install support (from JetPack 6.2.1) lists **AGX Orin and AGX Thor**; Orin Nano is not listed.
+- SDK Manager runs on Windows through WSL2, but NVIDIA's SDK Manager docs list Windows support (from JetPack 6.2.1) for **AGX Orin and AGX Thor** only; Orin Nano is not listed, and "flashing an external storage device is not supported via WSL2" (docs.nvidia.com/sdk-manager, WSL page; audited 2026-09-24).
 - NVIDIA forum threads report Orin Nano flashes failing on WSL/Windows with USB connection errors.
 - The reliable route would be dual-booting Ubuntu 22.04 on that PC (half a day of work).
 - → Point 5 is only partly mitigated ("reversible, but painful"). **Keep JetPack 6.x; the case for it got stronger.**
@@ -42,8 +42,8 @@ Why the board ships with JetPack 6 firmware: the firmware was built in September
 - AprilTag range/bearing matches the course's landmark-based localization better than depth does.
 - The D435i's value ($410) is "accurate distance with consistent error". It pays off for marker-free distance or obstacle maps.
 - Prerequisite: confirm librealsense works on the installed JetPack.
-  - **2026-09-23 software pre-check (no camera yet)**: PyPI has prebuilt `pyrealsense2` wheels for our exact platform — `pyrealsense2-2.58.4.10922-cp310-cp310-manylinux2014_aarch64.whl` (Python 3.10 on ARM64 = the Jetson's Python 3.10.12). aarch64 cp310 wheels exist for 2.58.0 through 2.58.4. → No source build of librealsense needed for the Python binding. This removes the biggest setup risk found in the research.
-  - Still unverified until the camera is plugged in: device detection and IMU streams on kernel 5.15.148-tegra, and USB permission (udev rules). Amazon's return window covers this.
+  - **2026-09-23 software pre-check (no camera yet)**: PyPI has prebuilt `pyrealsense2` wheels for our exact platform — `pyrealsense2-2.58.4.10922-cp310-cp310-manylinux2014_aarch64.whl` (Python 3.10 on ARM64 = the Jetson's Python 3.10.12). aarch64 cp310 wheels exist for 2.58.0 through 2.58.4. ~~→ No source build of librealsense needed for the Python binding.~~ *Superseded 2026-09-24:* the wheel imports fine but uses the kernel (V4L2/HID) path, which cannot deliver the IMU on the JetPack 6 kernel — a source build with the RSUSB backend was needed after all (see the IMU caveat below).
+  - Still unverified until the camera is plugged in: device detection and IMU streams on kernel 5.15.148-tegra. ~~Amazon's return window covers this.~~ *Corrected 2026-09-24:* buying from the official store, whose returns are for unopened items only; the software-side risk was reduced instead by the RSUSB build and the udev rule (both done before ordering).
   - The Jetson image has no `pip`; needs `sudo apt install python3-pip python3-venv` before installing the wheel.
 - A used unit can be checked numerically: On-Chip Calibration Health-Check and the Depth Quality Tool (subpixel RMS < 0.1).
 - Model names: **i = IMU, f = IR-pass filter**. The D435f has no IMU.
@@ -82,7 +82,7 @@ Reverses the "stay on microSD" decision made earlier the same day (kept below fo
 
 - **NVMe as the OS disk**: robots lose power abruptly; microSD filesystems corrupt easily.
 - **Gen4 SSD bought only for price**: the Jetson 2280 slot is PCIe Gen3 x4; the Gen4 drive was cheaper than the Gen3 option.
-- **No A2 microSD premium**: A2 command queuing needs host support; reports show no difference vs. A1 on Raspberry Pi 4 and earlier. Jetson support unconfirmed, so we did not pay for it.
+- **No A2 microSD premium**: A2 command queuing needs host support; community reports (not verified by us) show no difference vs. A1 on Raspberry Pi 4 and earlier. Jetson support unconfirmed, so we did not pay for it. Moot since the move to NVMe.
 - Two M.2 Key M slots: 2280 (x4) and 2242 (x2). The SSD is in the 2280 slot. Avoid B+M-key drives (fewer lanes).
 - NVMe is not detected at all with firmware < 36.0.
 
