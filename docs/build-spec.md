@@ -1,8 +1,8 @@
 # Parts List
 
-Prices as of 2026-09-22/23. Reasons in [decisions.md](decisions.md).
+Prices as of 2026-09-22/24. Reasons in [decisions.md](decisions.md). Only the Micro Center section is actual purchases; everything else is a plan until this file says otherwise.
 
-## Micro Center (bought 2026-09-23)
+## Bought — Micro Center, 2026-09-23
 
 | SKU | Item | Price |
 |---|---|---|
@@ -13,33 +13,32 @@ Prices as of 2026-09-22/23. Reasons in [decisions.md](decisions.md).
 | 974170 | Verbatim 64GB ToughMAX USB flash drive | $8.99 |
 | — | Ethernet cable | — |
 
-## Amazon
+## Planned — not ordered yet
 
-| Item | Price | Status |
-|---|---|---|
-| Waveshare AC8265 WiFi module (lists Orin Nano/NX, antennas included) | $28.99 | Ordered |
-| Logitech Brio 100 webcam | $35.99 | Ordered |
-| ~~Intel RealSense D435i~~ | $409.99 used / $499–519 new on Amazon | Removed — the official store is cheaper |
+| Item | Where | Price seen | Status |
+|---|---|---|---|
+| **RealSense D436** (depth + IMU + global-shutter RGB) | store.realsenseai.com | $354.00 new (+ tariff surcharge at checkout; returns only if unopened) | **Current pick** (2026-09-24) |
+| RealSense D435if (IMU + IR-pass filter) | store.realsenseai.com | $354.00 | Alternative — was the pick before the D436 check |
+| RealSense D435i (IMU) | store.realsenseai.com | $334.00 | Alternative — most community precedent, rolling-shutter RGB |
+| ~~RealSense D435i on Amazon~~ | Amazon | $409.99 used / $499–519 new | Dropped — the official store is cheaper |
+| Waveshare AC8265 WiFi module (listing names Orin Nano/NX, antennas included) | Amazon | $28.99 | Planned — buy with the camera |
+| USB-C data cable (Mac ↔ Jetson USB-C port) | any | ~$10 | Planned — gives SSH and a serial console with no display or network (see setup-log, L4T-README) |
+| Logitech Brio 100 webcam | Micro Center / Amazon | $35.99 | Optional — the D436's RGB stream covers it; only if a second, cheap camera is wanted |
+| Seeed reSpeaker XVF3800 USB mic array (+ small speaker) | Seeed / Amazon | to be checked | Later — voice step; chosen over conference speakerphones for beamforming, AEC and direction-of-arrival |
 
-## RealSense official store (store.realsenseai.com)
+## Planned — after choosing the robot base (wheeled, built from parts)
 
-| Item | Price (new) | Status |
-|---|---|---|
-| **RealSense D435if** (IMU + IR-pass filter) | $354.00 | **Current pick** — pending the pip/import check on the Jetson |
-| RealSense D435i (IMU) | $334.00 | Alternative if saving $20 |
+Base research: [../research/roomba-route.md](../research/roomba-route.md) (rejected: no Roomba), [../research/bom-diy.md](../research/bom-diy.md).
 
-## Not bought yet (after choosing the robot base)
-
-Base options: [../research/roomba-route.md](../research/roomba-route.md), [../research/bom-diy.md](../research/bom-diy.md).
-
-- Chassis, motors (**quadrature encoders required**), motor driver, battery
-- Microcontroller (e.g. Arduino Nano Every) for encoder counting and wheel PID
-- IMU (not needed if we buy the D435i)
-- Battery + DC-DC converter for the Jetson (9–20 V input, separate from motor power)
+- Chassis, two motors with **quadrature encoders**, motor driver, battery
+- Microcontroller (e.g. Arduino Nano Every) for encoder counting and wheel PID at 50–100 Hz
+- Base IMU: optional — the D436 has one; a base-mounted IMU is easier to sync with the encoders
+- DC-DC converter for the Jetson (9–20 V input, separate from motor power)
 
 ## Do not buy
 
 - 4K webcams: vision models downscale inputs to ~224–384 px
 - D435**f**: no IMU
 - Cheap car kits with single-channel "encoders": they cannot tell direction
-- Roomba i/j/s series, Combo, Create 3: no serial Open Interface port
+- Any Roomba (i/j/s series, Combo, Create 3 have no serial port; the 600-series route was rejected in favour of a parts build)
+- Stereolabs ZED for this board: computes depth on the Jetson GPU, which the on-robot models need
