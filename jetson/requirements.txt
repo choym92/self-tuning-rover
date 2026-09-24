@@ -1,0 +1,11 @@
+# Jetson venv ~/venvs/robot (system Python 3.10.12). Pinned 2026-09-24.
+#
+# pyrealsense2 is NOT installed from pip here. The PyPI wheel (2.58.4.10922) uses the
+# kernel V4L2/HID path, and the JetPack 6 kernel (5.15.148-tegra) has
+# CONFIG_HID_SENSOR_HUB unset, so the camera IMU cannot work through it.
+# Instead librealsense v2.58.4 is built from source on the Jetson with
+# -DFORCE_RSUSB_BACKEND=ON (see docs/setup-log.md, 2026-09-24) and exposed to the venv by
+#   site-packages/librealsense-rsusb-build.pth -> /home/paulcho/src/librealsense/build/Release
+# To go back to the wheel:  rm that .pth && pip install pyrealsense2==2.58.4.10922
+#
+# (no pip packages pinned yet beyond pip itself)
