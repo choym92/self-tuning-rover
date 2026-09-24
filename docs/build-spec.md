@@ -13,11 +13,11 @@ Prices as of 2026-09-22/24. Reasons in [decisions.md](decisions.md). Only the Mi
 | 974170 | Verbatim 64GB ToughMAX USB flash drive | $8.99 |
 | — | Ethernet cable | — |
 
-## Planned — not ordered yet
+## Ordered / planned
 
 | Item | Where | Price seen | Status |
 |---|---|---|---|
-| **RealSense D436** (depth + IMU + global-shutter RGB) | store.realsenseai.com | $354.00 new (+ tariff surcharge at checkout; returns only if unopened) | **Current pick** (2026-09-24) |
+| **RealSense D436** (depth + IMU + global-shutter RGB) | store.realsenseai.com | $354.00 + 12% tariff surcharge $42.48 + FedEx 2 Day $25.30 = **$421.78** (no sales tax charged) | **Ordered 2026-09-24** (returns only if unopened) |
 | RealSense D435if (IMU + IR-pass filter) | store.realsenseai.com | $354.00 | Alternative — was the pick before the D436 check |
 | RealSense D435i (IMU) | store.realsenseai.com | $334.00 | Alternative — most community precedent, rolling-shutter RGB |
 | ~~RealSense D435i on Amazon~~ | Amazon | $409.99 used / $499–519 new | Dropped — the official store is cheaper |
