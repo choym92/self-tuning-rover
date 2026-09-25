@@ -46,7 +46,7 @@ Software order: pan-tilt tracking loop (first tuning-by-replay experiment) → t
 | [docs/preflight.md](docs/preflight.md) | Checks written *before* each device-changing step: official sources, device facts, VERIFIED vs INFERENCE, fallback |
 | [docs/verify.md](docs/verify.md) | Per-layer verification procedures and the measured values |
 | [docs/build-spec.md](docs/build-spec.md) | Parts, SKUs, prices — actual purchases separated from plans |
-| [docs/reference/](docs/reference/) | Dated research snapshots kept for reuse: NVIDIA devkit guide review (2026-09-23), parts-build BOM (2026-09-22), software plan (2026-09-22), lessons from other builds (2026-09-24). Not maintained; decisions.md is current |
+| [docs/reference/](docs/reference/) | Dated research snapshots kept for reuse: NVIDIA devkit guide review (2026-09-23), parts-build BOM (2026-09-22), software plan (2026-09-22), lessons from other builds (2026-09-24), sources on running small LLMs on this board incl. the R36.4.7 CUDA allocation regression (2026-09-25). Not maintained; decisions.md is current |
 | [scripts/](scripts/) | Guarded scripts: microSD flashing from a Mac, NVMe install on the Jetson |
 | [jetson/](jetson/) | Code that runs on the robot (`requirements.txt` documents the Python environment) |
 | [tools/](tools/) | Replay, scoring and tuning tools that run on the Mac (empty for now) |
