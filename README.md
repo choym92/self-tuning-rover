@@ -41,6 +41,7 @@ Software order: pan-tilt tracking loop (first tuning-by-replay experiment) → t
 
 | Path | Contents |
 |---|---|
+| [AGENTS.md](AGENTS.md) | Briefing for any coding agent or new collaborator: how to reach the Jetson, the working rules, where to look, current state |
 | [docs/setup-log.md](docs/setup-log.md) | Dated log of every setup step, including what went wrong and why |
 | [docs/decisions.md](docs/decisions.md) | Decisions and their reasons, hardest-to-reverse first |
 | [docs/preflight.md](docs/preflight.md) | Checks written *before* each device-changing step: official sources, device facts, VERIFIED vs INFERENCE, fallback |
