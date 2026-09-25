@@ -116,6 +116,21 @@ Reverses the "stay on microSD" decision made earlier the same day (kept below fo
   - Open points before buying: the listing says "Orin Nano 4GB Kit" — the Super developer kit uses the same carrier board, so it should fit (INFERENCE; confirm with Waveshare or on arrival); how the driver board feeds the Jetson's DC jack (ROS2 wiki mentions a 12.6 V cable; the devkit accepts 9–20 V). Trade-off accepted knowingly: skid-steer slips in turns, so wheel odometry is worse than a two-wheel differential drive — the filter and per-surface noise learning are there for exactly that.
   - Course rules (Ed #50/#51/#52, read 2026-09-24): any platform is allowed, "premade kits, drones, and robots are allowed assuming you can directly access the sensors and actuators via your own custom code"; collaboration and code sharing are encouraged for the Hardware Challenges. A JSON-controlled ESP32 base with open firmware qualifies.
 
+- **Compared against alternatives 2026-09-25** (Paul asked whether this is really the best kit; until then it was the first integrated kit that met the requirements). Requirements: (a) encoder data readable by our own code over an open protocol, (b) open motor-controller firmware, (c) Jetson devkit mount + documented battery power, (d) pan-tilt, (e) base IMU, (f) payload for the D436 and a later ~1 kg arm, (g) ≤ USD 600 without Jetson, (h) buyable and returnable now. Read from vendor pages/wikis/GitHub on 2026-09-25:
+
+  | Kit | a | b | c | d | e | f | g | h | Biggest drawback |
+  |---|---|---|---|---|---|---|---|---|---|
+  | Waveshare UGV Rover PT Acce (SKU 27772) | ✔ | ✔ GPL-3 ESP32 | ? | ✔ | ✔ | ? | ✔ | ✔ 15 days | Vendor never names the Orin Nano **Super** devkit; Jetson power-cable spec not on the page |
+  | Waveshare UGV02 / Beast / WAVE ROVER | ✔ | ✔ same firmware | ? | add-on | ✔ | ? | ✔ | ✔ | Pan-tilt not integrated; Beast is tracked (worse odometry) |
+  | Yahboom ROSMASTER X3 (Orin Nano, no board) | ✔/? | ? no license file in the STM32 repo | ? | add-on | ✔ | ? | ✘ $659 | ? | Over budget; mecanum slip hurts odometry |
+  | Hiwonder JetRover (Orin Nano) | ? | ? "source provided after purchase" | ? | ✔ | ✔ | ✔ arm mount | ? price not shown | ✔ | Firmware openness unverifiable before buying |
+  | Waveshare JetBot AI Kit | ✘ no encoders | – | ✘ Nano only | ✘ | ✘ | ✘ | ✔ | ✔ | Obsolete, too small |
+  | LeKiwi (LeRobot) | ? servo telemetry | ✘ | ✘ printed cage, no power spec | ✘ | ✘ | ? | ✔ | ? | Three DIY gaps |
+  | TurtleBot 4 / TurtleBot 3 | ✔ | ✘ Create 3 closed / ✔ OpenCR | ✘ / DIY | ✘ | ✔ | ✔ | ✘ $1,195+ / ✔ | ✔ | TB4 budget + closed firmware; TB3 has no Jetson path |
+  | Elephant myAGV Plus (2026) | ? | ✘ closed | ✔ names the Super devkit | ✘ | ? | ✔ 8 kg | ✘ likely | ✔ | Closed motor firmware |
+
+  Verdict: the UGV Rover PT is the best fit of the eight, with the JetRover as the only serious alternative (swappable chassis, rated arm mount, ROS 2 Humble container) if one accepts unverifiable firmware. The two "?" on the Rover PT are the same open points as before and must be answered by Waveshare before ordering: does the Orin Nano Super developer kit board mount and power correctly (which cable, which voltage into the DC jack), and what payload margin is left for a 1 kg arm. Also confirm the "Jetson Orin AI Kit" SKU (Jetson-side app `waveshareteam/ugv_jetson`, Flask web app) is the one we want rather than the separate "ROS2 Kit" SKU; both use the same JSON serial protocol.
+
 ## Camera alternatives considered before the D436 pick (2026-09-24)
 
 Criteria in order: depth accuracy at 0.3–3 m indoors; a global-shutter RGB image while the robot moves (AprilTag pose is the core measurement); IMU with synchronized timestamps; SDK, ROS 2 and community depth. "Newest" is not a criterion.
