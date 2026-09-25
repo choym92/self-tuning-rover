@@ -52,7 +52,7 @@ Log sensor values **to CSV with timestamps**, so filter tuning can be repeated o
 | pyrealsense2 import | `~/venvs/robot/bin/python -c "import pyrealsense2 as rs; print(rs.__version__)"` | 2.58.4; 0 devices (no camera yet) |
 | Screen blanking | `gsettings get org.gnome.desktop.session idle-delay` | 0 (disabled; see setup-log for why) |
 
-Pending checks: D436 detection + IMU streams on kernel 5.15.148-tegra (when the camera arrives; D436 replaced the D435if as the pick on 2026-09-24); WiFi card (AC8265) link-up; SD reinsert behaviour of `BootOrder` (not tested — never insert both).
+Pending checks: D436 detection + IMU streams on kernel 5.15.148-tegra (when the camera arrives; D436 replaced the D435if as the pick on 2026-09-24); WiFi — resolved 2026-09-25, see below (the kit already has a working card); SD reinsert behaviour of `BootOrder` (not tested — never insert both).
 
 ## RealSense software path without a camera (2026-09-24) — pass
 
@@ -66,3 +66,18 @@ Pending checks: D436 detection + IMU streams on kernel 5.15.148-tegra (when the 
 | Tools run | `rs-enumerate-devices` | "No device detected. Is it plugged in?" |
 
 Pending (needs the camera): USB enumeration, depth/RGB streams, **IMU streams**, Depth Quality Tool RMS. Pending (needs sudo): udev rule install.
+
+## Checks with the Jetson on again (2026-09-25) — read-only
+
+| Check | Command (on the Jetson) | Result |
+|---|---|---|
+| WiFi driver modules in this kernel | `modinfo -n rtl8822ce`; `modinfo -n rtk_btusb`; `modinfo -n iwlwifi` | `rtl8822ce.ko` and `rtk_btusb.ko` present under `/lib/modules/5.15.148-tegra/updates/`; `iwlwifi` **not found** (confirms: Intel cards would need the backport) |
+| WiFi card physically present | `lspci -nn` | `0001:01:00.0 Network controller: Realtek RTL8822CE 802.11ac PCIe Wireless Network Adapter [10ec:c822]` — **the dev kit already has the card**; the 2026-09-23 note "no WiFi card" was wrong |
+| Driver loaded, interface up | `lsmod`; `ip -br link`; `rfkill list` | `rtl8822ce` loaded; `wlP1p1s0` UP/NO-CARRIER (not connected); not blocked |
+| Antennas work | `nmcli device wifi list --rescan yes` | 32 networks seen; home 2.4 GHz AP signal 100, several 5 GHz APs at 70 |
+| Bluetooth | `hciconfig -a`; `lsusb` | `hci0` UP RUNNING (USB `13d3:3549` IMC Networks, the card's BT half) |
+| Docker | `docker --version`; `dpkg -l docker-ce` | 29.8.1 (`docker-ce 5:29.8.1-1~ubuntu.22.04~jammy`) — newer than the 28.2.2 noted before the apt upgrade; `nvidia-container-toolkit` 1.16.2; daemon active; `paulcho` **not** in the `docker` group |
+| Memory / swap baseline (desktop on, nothing else) | `free -h`; `swapon --show` | 1.5 GiB used, 5.7 GiB available of 7.4 GiB; swap = 6 × 635 MB zram (3.7 GiB), 0 used |
+| Node.js / Ollama | `node --version`; `which ollama` | neither installed |
+
+Consequence: no WiFi card purchase is needed; connecting is `nmcli device wifi connect <SSID>` (needs sudo) when the robot leaves the desk.
