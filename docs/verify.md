@@ -79,5 +79,6 @@ Pending (needs the camera): USB enumeration, depth/RGB streams, **IMU streams**,
 | Docker | `docker --version`; `dpkg -l docker-ce` | 29.8.1 (`docker-ce 5:29.8.1-1~ubuntu.22.04~jammy`) — newer than the 28.2.2 noted before the apt upgrade; `nvidia-container-toolkit` 1.16.2; daemon active; `paulcho` **not** in the `docker` group |
 | Memory / swap baseline (desktop on, nothing else) | `free -h`; `swapon --show` | 1.5 GiB used, 5.7 GiB available of 7.4 GiB; swap = 6 × 635 MB zram (3.7 GiB), 0 used |
 | Node.js / Ollama | `node --version`; `which ollama` | neither installed |
+| CUDA allocation limit (R36.4.7 regression) | Python + `ctypes` on `/usr/local/cuda/lib64/libcudart.so.12`: `cudaMalloc` 1…6 GiB, free after each | 1, 2, 3 GiB ok; **4 GiB fails** (rc 2 out of memory, `NvMapMemAllocInternalTagged … error 12`) with 5.36 GiB reported free → the bug is present here; re-run after the 36.5.2 upgrade (preflight.md) |
 
 Consequence: no WiFi card purchase is needed; connecting is `nmcli device wifi connect <SSID>` (needs sudo) when the robot leaves the desk.
