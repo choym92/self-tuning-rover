@@ -94,5 +94,5 @@ Consequence: no WiFi card purchase is needed; connecting is `nmcli device wifi c
 | WiFi / Bluetooth drivers | `lsmod`; `nmcli device wifi list --rescan yes` | `rtl8822ce`, `rtk_btusb` loaded; 47 networks |
 | Docker | `docker --version`; `systemctl is-active docker` | 29.8.1; active |
 | RealSense library | venv `import pyrealsense2`; `rs-enumerate-devices` | 2.58.4; "No device detected" (camera not here yet) |
-| **CUDA allocation** | same `ctypes` `cudaMalloc` test as before | **1–4 GiB succeed** (4 GiB failed on 36.4.7); 5 GiB fails with 4.7 GB free + 1.3 GB cache and the desktop on — retest after `drop_caches` pending |
+| **CUDA allocation** | same `ctypes` `cudaMalloc` test as before | **1–4 GiB succeed** (4 GiB failed on 36.4.7). After `drop_caches` (Paul, by hand): 5 GiB ok, 6 GiB fails. Later with 2.4 GB in use: 4 GiB ok, 5 GiB fails. Rule of thumb: one GPU allocation must fit in the RAM `free` shows at that moment; the GPU cannot use swap or wait for cache reclaim. With the desktop on that is about 4–5 GiB; a 6 GiB block never fits on this 8 GB board (7.43 GiB usable minus the OS) |
 | Memory baseline | `free -m` | 1,605 MB used, 5,759 MB available |
