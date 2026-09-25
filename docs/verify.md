@@ -96,3 +96,15 @@ Consequence: no WiFi card purchase is needed; connecting is `nmcli device wifi c
 | RealSense library | venv `import pyrealsense2`; `rs-enumerate-devices` | 2.58.4; "No device detected" (camera not here yet) |
 | **CUDA allocation** | same `ctypes` `cudaMalloc` test as before | **1–4 GiB succeed** (4 GiB failed on 36.4.7). After `drop_caches` (Paul, by hand): 5 GiB ok, 6 GiB fails. Later with 2.4 GB in use: 4 GiB ok, 5 GiB fails. Rule of thumb: one GPU allocation must fit in the RAM `free` shows at that moment; the GPU cannot use swap or wait for cache reclaim. With the desktop on that is about 4–5 GiB; a 6 GiB block never fits on this 8 GB board (7.43 GiB usable minus the OS) |
 | Memory baseline | `free -m` | 1,605 MB used, 5,759 MB available |
+
+## LLM on the Jetson, llama.cpp v0.5.0 built in a container (2026-09-25)
+
+Setup: image `rover/llama_cpp:v0.5.0` (built from `jetson/llm/Dockerfile` on the NVIDIA `l4t-jetpack:r36.4.0` base, CUDA 12.6, `GGML_CUDA_NO_VMM=ON`), run with `--runtime nvidia`, model files in `~/models`, caches dropped before each run, desktop running. Host untouched.
+
+| Model (file) | Size | pp512 tok/s | tg128 tok/s | Reference | Note |
+|---|---|---|---|---|---|
+| Nemotron 3 Nano 4B Q4_K_M (`NVIDIA-Nemotron3-Nano-4B-Q4_K_M.gguf`, 3.97 B params) | 2.63 GiB | 581.6 ± 10.0 | **19.63 ± 0.04** | NVIDIA: 18 tok/s with llama.cpp on this board | GPU confirmed: `ggml_cuda_init: found 1 CUDA devices … Device 0: Orin, compute capability 8.7, VMM: no` |
+
+`VMM: no` is the device's own answer: the Orin does not support CUDA virtual memory management, so building with `GGML_CUDA_NO_VMM=ON` changes nothing at run time (this was an inference in the preflight; now measured).
+
+Pending for each model: RAM at 4k / 16k context (`tegrastats`), max temperature, and the chat + tool-call harness (see preflight, step 9).
