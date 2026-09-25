@@ -166,6 +166,10 @@ Sources: store.realsenseai.com product pages, stereolabs.com, OpenELAB Orbbec-vs
 - Software, all local on the Orin Nano Super (2026 write-ups exist for this exact board): whisper.cpp with CUDA or faster-whisper for speech-to-text (≈1–2 s for 20 s of audio), Piper for text-to-speech (sub-second), optionally a small local LLM through Ollama for command understanding.
 - Order: after the camera and the base.
 
+## Temporary: `paulcho` in the `docker` group for the LLM test day (2026-09-25)
+
+Added by Paul (`sudo usermod -aG docker paulcho`) so the LLM comparison could be driven from the Mac over SSH without typing sudo for each of the ~12 container starts. The `docker` group is root-equivalent; the morning's advice was not to do this. Accepted knowingly for one evening on a LAN-only personal board. **To undo when the test day ends:** `sudo gpasswd -d paulcho docker` and log out/in; verify with `groups paulcho`.
+
 ## On-robot LLM: size before novelty (2026-09-24, planned)
 
 - The 8 GB is shared by CPU and GPU (5.4 GB free with the desktop up) and decode speed is bound by memory bandwidth (102 GB/s), so 2–4B-parameter models at 4-bit are the ceiling if YOLO and Whisper run alongside; 4B-class models fail under concurrent requests on this board; 7–9B models run alone only.
