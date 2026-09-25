@@ -164,49 +164,53 @@ Outcome (2026-09-25, run by Paul by hand, step by step, with read-only checks fr
 
 ---
 
-## First LLM test in a container: llama.cpp + one GGUF model (2026-09-25, written before running)
+## First LLM test in a container: llama.cpp built from source + four small 2026 models (2026-09-25, written before running; revised the same day)
 
-Goal: measure, on this board, what a 2–4B model costs and delivers — tokens/s (prompt and generation), RAM taken, GPU use (`tegrastats`), temperature, and how often it returns a valid JSON tool call — with **nothing installed on the host**. Everything lives in one Docker image and one model directory; removal = `docker rmi` + `rm -rf ~/models`. No `daemon.json` edit, no `docker` group, no systemd unit, no swapfile. Sudo only for `docker` (Paul types it).
+Goal: measure, on this board, what a 2–4B model costs and delivers — tokens/s (prompt and generation), RAM taken, GPU use (`tegrastats`), temperature, and how often it returns a valid JSON tool call — with **nothing installed on the host**. Everything lives in two Docker images and one model directory; removal = `docker rmi` + `rm -rf ~/models`. No `daemon.json` edit, no `docker` group, no systemd unit, no swapfile. Sudo only for `docker` (Paul types it).
 
-Two stages, because the prebuilt images are old:
+Why build instead of pulling: the prebuilt `dustynv/llama_cpp` images stop at build b5283 (2025-05-06) and cannot load the 2026 architectures. llama.cpp itself is current (release v0.5.0 on 2026-09-23); building it from source on NVIDIA's JetPack 6 base image gives today's version. Dockerfile: `jetson/llm/Dockerfile`.
 
-| Stage | Image | llama.cpp build | Model | Why |
-|---|---|---|---|---|
-| 1 (now) | `dustynv/llama_cpp:b5283-r36.4-cu128-24.04`, 3.34 GB, pushed 2025-05-06 | b5283 | **Qwen3-4B Q4_K_M** (`unsloth/Qwen3-4B-GGUF`, `Qwen3-4B-Q4_K_M.gguf`, 2,497,281,312 B). Qwen3 needs ≥ b5092 → supported | Zero build; proves the pipeline and gives first numbers |
-| 2 (later) | our own image built from `nvcr.io/nvidia/l4t-jetpack:r36.4.0` (5.22 GB compressed; CUDA toolkit with `nvcc`, cuDNN, TensorRT) with current llama.cpp | current | Qwen3.5 2B (1.19 GB), Nemotron 3 Nano 4B (2.64 GB, needs ≥ b6315, `nemotron_h`), Gemma 4 E2B QAT (2.44 GB, newer still) | The 2026 architectures do not load in b5283 |
+Model order (decided with Paul, 2026-09-25) and why:
+1. **Nemotron 3 Nano 4B** Q4_K_M (`nvidia/NVIDIA-Nemotron-3-Nano-4B-GGUF`, 2,837,072,864 B) — calibration: NVIDIA published 18 tok/s for exactly this file with llama.cpp on the Orin Nano 8 GB; hybrid Mamba-2/attention, needs llama.cpp ≥ b6315 (we build v0.5.0).
+2. **Qwen3.5 4B** then **2B** Q4_K_M (`unsloth/Qwen3.5-4B-GGUF`, size read at download; `unsloth/Qwen3.5-2B-GGUF` 1,280,835,840 B) — the likely pick (NVIDIA's own 8 GB recipe uses the 2B; tool calling).
+3. **Gemma 4 E2B** QAT (`unsloth/gemma-4-E2B-it-qat-GGUF`, UD-Q4_K_XL 2,620,370,976 B) — different family, quantization-aware.
+4. **Ministral 3 3B** if time.
 
 Official source(s):
-- jetson-containers compatibility rule, `jetson_containers/l4t_version.py`: for L4T 36, a container is compatible when `l4t_version.minor >= 4 and l4t_version_host.minor >= 4` → an r36.5.2 host accepts r36.4 images; `get_cuda_version()` maps both 36.4 and 36.5 to CUDA 12.6. https://github.com/dusty-nv/jetson-containers/blob/master/jetson_containers/l4t_version.py
-- jetson-containers `docs/run.md`: `jetson-containers run` = `sudo docker run --runtime nvidia -it --rm --network=host …` plus a `/data` mount. We drop `--network=host` and publish the port on 127.0.0.1 only. https://github.com/dusty-nv/jetson-containers/blob/master/docs/run.md
-- Docker Hub tags for `dustynv/llama_cpp` (newest r36 tag b5283, no r36.5 tag). https://hub.docker.com/r/dustynv/llama_cpp/tags
-- NVIDIA container toolkit on Jetson: the runtime bind-mounts driver libraries and device nodes listed in `/etc/nvidia-container-runtime/host-files-for-container.d/*.csv`; the CUDA toolkit inside the image is the image's own. https://nvidia.github.io/container-wiki/toolkit/jetson.html
-- NVIDIA forum 370049 (JetPack 6.2.2 / R36.5.0, 2026-05 to 08): llama.cpp `NvMapMemAllocInternalTagged … error 12` when a second GPU process holds CMA memory; NVIDIA's workaround `GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 LLAMA_ARG_FIT=off`. https://forums.developer.nvidia.com/t/370049
-- Qwen3 support in llama.cpp from build b5092 (kreier/llama.cpp-jetson issue #3; qwen.readthedocs.io llama.cpp page).
+- Base image `nvcr.io/nvidia/l4t-jetpack:r36.4.0` (NGC; 5.22 GB compressed; "CUDA, cuDNN, TensorRT, VPI, Jetson Multimedia"), the same image jetson-containers uses as its L4T ≥ 36 base. https://catalog.ngc.nvidia.com/orgs/nvidia/containers/l4t-jetpack
+- jetson-containers compatibility rule (`jetson_containers/l4t_version.py`): an r36.5 host accepts r36.4 images; both map to CUDA 12.6. https://github.com/dusty-nv/jetson-containers/blob/master/jetson_containers/l4t_version.py
+- NVIDIA container toolkit on Jetson: the runtime bind-mounts driver libraries and device nodes from the CSV files; the CUDA toolkit inside the image is the image's own. https://nvidia.github.io/container-wiki/toolkit/jetson.html
+- llama.cpp CUDA build on the Orin Nano: `-DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=87` (NVIDIA forum 343758, 2025-09). llama.cpp release v0.5.0, 2026-09-23. https://github.com/ggml-org/llama.cpp/releases
+- NVIDIA forum 370049 (JetPack 6.2.2 / R36.5.0): llama.cpp `NvMapMemAllocInternalTagged … error 12` when a second GPU process holds memory; workaround `GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 LLAMA_ARG_FIT=off`. https://forums.developer.nvidia.com/t/370049
+- Nemotron 3 Nano 4B on the Orin Nano 8 GB: "the Q4_K_M checkpoint running with Llama.cpp delivers 18 tokens/s". https://huggingface.co/blog/nvidia/nemotron-3-nano-4b
 
-Known-issues search: (1) the image carries CUDA 12.8 user-space on a CUDA 12.6 host — CUDA 12.x minor-version compatibility should cover it, but no NVIDIA statement for Jetson was found → INFERENCE; the test itself decides (the `ggml_cuda_init: found 1 CUDA devices: Device 0: Orin, compute capability 8.7` line must appear, otherwise the run is on the CPU and the numbers are meaningless). (2) Only one GPU process at a time (370049). (3) Ollama on Jetson has GPU-detection and OOM reports on this exact board and is not used here.
+Known-issues search: (1) building llama.cpp with nvcc on 8 GB can run out of memory with `-j6` → Dockerfile uses `-j4` (INFERENCE from general experience; if the build dies, retry with `-j2`). (2) The base image is CUDA 12.6 like the host, so the cu128-vs-12.6 question of the prebuilt image does not arise. (3) Only one GPU process at a time (370049). (4) The `ggml_cuda_init: found 1 CUDA devices: Device 0: Orin, compute capability 8.7` line must appear at run time; without it the run is on the CPU and the numbers are meaningless.
 
 | Assumption | Evidence (read on the Jetson, 2026-09-25) | Status |
 |---|---|---|
-| Docker works, sudo needed | `docker --version` 29.8.1, `systemctl is-active docker` active; `docker images` as `paulcho` → permission denied (not in the group, by decision) | VERIFIED |
-| NVIDIA runtime present | `nvidia-ctk --version` 1.16.2; `/etc/nvidia-container-runtime/host-files-for-container.d/{devices,drivers}.csv` | VERIFIED (files); runtime registration checked in step 2 |
-| Disk | 427 GB free (image 3.3 GB + model 2.5 GB) | VERIFIED |
-| Memory available for the model | `free -m`: 4.7–5.8 GB available with the desktop; CUDA can allocate 4 GiB in one piece after the R36.5.2 upgrade; a 4B Q4 model needs ≈ 2.5 GB weights + KV cache (≈ 0.3 GB at 4k context) | VERIFIED (allocation), INFERENCE (model footprint until measured) |
-| No leftovers from earlier experiments | no images, no containers, no `~/jetson-containers`, no Ollama, no llama.cpp on the host | VERIFIED |
-| Image compatible with this host | compatibility rule above (r36.5 host ≥ r36.4 image) | VERIFIED (rule); actual run untested |
+| Docker works, sudo needed | `docker --version` 29.8.1, daemon active; `docker images` as `paulcho` → permission denied (not in the group, by decision) | VERIFIED |
+| NVIDIA runtime present | `nvidia-ctk --version` 1.16.2; `/etc/nvidia-container-runtime/host-files-for-container.d/{devices,drivers}.csv` | VERIFIED (files); runtime listing checked in step 2 |
+| Disk | 427 GB free (base image ≈ 10 GB on disk, our image a few GB more, models ≈ 9 GB) | VERIFIED |
+| Memory for a 4B model | 4.7–5.8 GB available with the desktop; CUDA can allocate 4 GiB in one piece since the R36.5.2 upgrade; a 4B Q4 model needs ≈ 2.6–2.8 GB weights + KV cache | VERIFIED (allocation), INFERENCE (footprint until measured) |
+| No leftovers from earlier experiments | no images, no containers, no Ollama, no llama.cpp on the host | VERIFIED |
+| Base image compatible with this host | compatibility rule above (r36.5 host ≥ r36.4 image) | VERIFIED (rule); run untested |
+| Build tools inside the base image | `nvcc` is part of the JetPack image; git/cmake/gcc installed by the Dockerfile | INFERENCE until step 3 |
 
-Reversibility / fallback: containers run with `--rm`; `sudo docker rmi dustynv/llama_cpp:b5283-r36.4-cu128-24.04`; `rm -rf ~/models`. If the CUDA init line is missing (CPU fallback) or `error 12` appears: stop, record, and go to stage 2 (own image on the r36.4.0 JetPack base) rather than patching the host. Stop rule: any step that would need a change outside the container or `~/models`.
+Reversibility / fallback: containers run with `--rm`; `sudo docker rmi rover/llama_cpp:v0.5.0 nvcr.io/nvidia/l4t-jetpack:r36.4.0`; `rm -rf ~/models ~/llm`. If the build fails: read the log, retry with `-j2`, or pin an older tag; nothing on the host changes. If the CUDA init line is missing or `error 12` appears: stop, record, investigate — do not patch the host. Stop rule: any step that would need a change outside the containers, `~/llm` and `~/models`.
 
-Adversarial review result: the research agent flagged three uncertainties — b5283 loading the model (resolved by choosing Qwen3, not Qwen3.5), cu128-on-12.6 (left as a measured test), and the 2026 models needing a rebuild (moved to stage 2).
+Adversarial review result: the research agent's three uncertainties (old image cannot load 2026 models; cu128 on a 12.6 host; rebuild needed) are all removed by building on the 12.6 base image; remaining risks are build memory/time and the single-GPU-process rule.
 
 Commands (one at a time, Paul types; expected output after each):
-1. Model download (no sudo): `mkdir -p ~/models && cd ~/models && curl -L -o Qwen3-4B-Q4_K_M.gguf https://huggingface.co/unsloth/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf && ls -l Qwen3-4B-Q4_K_M.gguf` → size exactly 2497281312.
+1. Get the Dockerfile (no sudo): `mkdir -p ~/llm ~/models && cd ~/llm && curl -fsSL -o Dockerfile https://raw.githubusercontent.com/choym92/self-tuning-rover/main/jetson/llm/Dockerfile && cat Dockerfile` → the file shown, `FROM nvcr.io/nvidia/l4t-jetpack:r36.4.0`, `ARG LLAMA_TAG=v0.5.0`.
 2. Runtime check: `sudo docker info | grep -A2 -i runtimes` → shows `nvidia`.
-3. Image: `sudo docker pull dustynv/llama_cpp:b5283-r36.4-cu128-24.04` → "Pull complete", `sudo docker images` lists it (≈ 3.3 GB).
-4. Where the binaries are (read-only inside the container): `sudo docker run --rm dustynv/llama_cpp:b5283-r36.4-cu128-24.04 bash -c 'which llama-bench llama-server llama-cli; ls /opt'` → paths.
-5. Snapshot before: `free -m | sed -n 2p`; CPU/GPU temperature (`cat /sys/class/thermal/thermal_zone0/temp`).
-6. Benchmark: `sudo docker run --runtime nvidia --rm -v /home/paulcho/models:/models dustynv/llama_cpp:b5283-r36.4-cu128-24.04 llama-bench -m /models/Qwen3-4B-Q4_K_M.gguf -ngl 99 -p 512 -n 128` → must print the `ggml_cuda_init … Orin, compute capability 8.7` line; then a table with `pp512` and `tg128` tok/s.
-7. Server + monitoring: terminal A `sudo docker run --runtime nvidia --rm -p 127.0.0.1:8080:8080 -v /home/paulcho/models:/models -e GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 dustynv/llama_cpp:b5283-r36.4-cu128-24.04 llama-server -m /models/Qwen3-4B-Q4_K_M.gguf -ngl 99 -c 4096 --host 0.0.0.0 --port 8080` (0.0.0.0 inside the container; the host publishes it on 127.0.0.1 only); terminal B `sudo tegrastats --interval 1000` (RAM, GR3D_FREQ, temperatures); terminal C one chat request with `curl http://127.0.0.1:8080/v1/chat/completions …` and then the 20-prompt tool-call script (to be written as `jetson/llm_toolcall_test.py`: 10 plain questions, 10 that must answer with a JSON `{"tool": "...", "args": {...}}`; pass = valid JSON with the expected tool name).
-8. Record in verify.md: pp/tg tok/s, RAM delta, GR3D %, max temperature, tool-call pass rate, and whether the CUDA line appeared.
-9. Cleanup (or keep for stage 2): `sudo docker rmi dustynv/llama_cpp:b5283-r36.4-cu128-24.04`; the model file can stay in `~/models`.
+3. Base image: `sudo docker pull nvcr.io/nvidia/l4t-jetpack:r36.4.0` → "Pull complete"; `sudo docker images` shows it (≈ 10 GB on disk). Quick check that nvcc exists: `sudo docker run --rm nvcr.io/nvidia/l4t-jetpack:r36.4.0 bash -c 'nvcc --version | tail -2; nproc; free -m | sed -n 2p'`.
+4. Build, detached with a log (30–60 min expected): `cd ~/llm && sudo bash -c "setsid nohup docker build -t rover/llama_cpp:v0.5.0 --build-arg LLAMA_TAG=v0.5.0 . > /home/paulcho/llm/build.log 2>&1 < /dev/null &"`; watch with `tail -f ~/llm/build.log`; done when the log ends with "naming to docker.io/rover/llama_cpp:v0.5.0" and `sudo docker images` lists `rover/llama_cpp`.
+5. Binaries: `sudo docker run --rm rover/llama_cpp:v0.5.0 bash -c 'which llama-server llama-bench llama-cli; llama-cli --version'`.
+6. Models (no sudo; ≈ 2.8 GB first): `cd ~/models && curl -L -o NVIDIA-Nemotron3-Nano-4B-Q4_K_M.gguf https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-4B-GGUF/resolve/main/NVIDIA-Nemotron3-Nano-4B-Q4_K_M.gguf && ls -l` → 2,837,072,864 bytes.
+7. Snapshot before: `free -m | sed -n 2p`; `cat /sys/class/thermal/thermal_zone0/temp`.
+8. Calibration benchmark: `sudo docker run --runtime nvidia --rm -v /home/paulcho/models:/models rover/llama_cpp:v0.5.0 llama-bench -m /models/NVIDIA-Nemotron3-Nano-4B-Q4_K_M.gguf -ngl 99 -p 512 -n 128` → the CUDA init line, then a table; `tg128` should be near NVIDIA's 18 tok/s.
+9. Server + monitoring: terminal A `sudo docker run --runtime nvidia --rm -p 127.0.0.1:8080:8080 -v /home/paulcho/models:/models rover/llama_cpp:v0.5.0 llama-server -m /models/<file>.gguf -ngl 99 -c 4096 --host 0.0.0.0 --port 8080`; terminal B `sudo tegrastats --interval 1000`; terminal C one `curl` chat request, then the 20-prompt tool-call harness (`jetson/llm/toolcall_test.py`, to be written: 10 plain questions, 10 that must answer with JSON `{"tool": …, "args": …}`; pass = valid JSON with the expected tool).
+10. Repeat 6–9 for Qwen3.5 4B, Qwen3.5 2B, Gemma 4 E2B (Ministral 3 3B if time); record everything in verify.md: pp/tg tok/s, RAM delta, GR3D %, max temperature, tool-call pass rate, CUDA line present.
+11. Cleanup when done (or keep for later): `sudo docker rmi rover/llama_cpp:v0.5.0 nvcr.io/nvidia/l4t-jetpack:r36.4.0`; models can stay in `~/models`.
 
 Outcome: (not run yet)
