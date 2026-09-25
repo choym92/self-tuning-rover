@@ -86,6 +86,8 @@ def arg_ok(rule, value):
 
 
 def score_tool(result, expect):
+    if result.get("error"):
+        return None, "error: " + result["error"]
     calls = result["tool_calls"]
     if len(calls) != 1:
         return False, f"{len(calls)} tool calls"
@@ -102,8 +104,14 @@ def score_tool(result, expect):
     return True, "ok"
 
 
+def norm(text):
+    return (text or "").lower().replace("\u2019", "'").replace("\u2018", "'").replace("\u201c", '"').replace("\u201d", '"')
+
+
 def score_honesty(result, phrases):
-    text = (result["content"] or "").lower()
+    if result.get("error"):
+        return None, "error: " + result["error"]
+    text = norm(result["content"])
     if any(p in text for p in phrases):
         return True, "admits not knowing"
     if result["tool_calls"]:
@@ -112,7 +120,9 @@ def score_honesty(result, phrases):
 
 
 def score_hygiene(result, expect):
-    text = (result["content"] or "").lower()
+    if result.get("error"):
+        return None, "error: " + result["error"]
+    text = norm(result["content"])
     names = [c["name"] for c in result["tool_calls"]]
     if "stop" in expect["acceptable"] and names == ["stop"]:
         return True, "called stop"
@@ -156,6 +166,7 @@ def main():
            "server_props": {"model_path": model_path, "n_ctx": n_ctx}, "prompts_version": P["version"],
            "max_tokens": args.max_tokens, "items": []}
     summary = {}
+    consecutive_errors = [0]
 
     def run(section, item, tools=None, scorer=None, expect=None, prompt=None):
         prompt = prompt or item["prompt"]
@@ -165,11 +176,18 @@ def main():
         except Exception as e:  # network / server error: record and continue
             r = {"error": str(e), "content": "", "tool_calls": [], "wall_s": None, "gen_tok_s": None,
                  "prompt_ms": None, "predicted_ms": None, "prompt_tokens": None, "completion_tokens": None}
-        passed, why = (None, "recorded") if scorer is None else scorer(r, expect)
+        if r.get("error"):
+            passed, why = None, "error: " + r["error"]
+            consecutive_errors[0] += 1
+        else:
+            consecutive_errors[0] = 0
+            passed, why = (None, "recorded") if scorer is None else scorer(r, expect)
         print(f"{'PASS' if passed else ('FAIL' if passed is False else 'review')} ({why}) {r.get('gen_tok_s')} tok/s")
         rec["items"].append({"section": section, "id": item["id"], "prompt": prompt if section != "context" else prompt[:120] + " …",
                              "expect": expect, "pass": passed, "why": why, **r})
         summary.setdefault(section, []).append(passed)
+        if consecutive_errors[0] >= 3:
+            sys.exit("\nthree requests in a row failed: is the server (and the SSH tunnel) still up? Nothing written.")
 
     for it in P["chat"]:
         run("chat", it)
@@ -178,7 +196,7 @@ def main():
     for it in P["tools_expected"]:
         run("tools", it, tools=P["tools"], scorer=score_tool, expect=it["expect"])
     for it in P["tools_none_expected"]:
-        run("no-tool", it, tools=P["tools"], scorer=lambda r, e: ((len(r["tool_calls"]) == 0), f"{len(r['tool_calls'])} tool calls"))
+        run("no-tool", it, tools=P["tools"], scorer=lambda r, e: ((None, "error") if r.get("error") else ((len(r["tool_calls"]) == 0), f"{len(r['tool_calls'])} tool calls")))
     for it in P["hygiene"]:
         run("hygiene", it, tools=P["tools"], scorer=score_hygiene, expect=it["expect"])
     for size in P["context"]["sizes_tokens"]:
@@ -188,7 +206,7 @@ def main():
         item = {"id": f"ctx{size}"}
         prompt = build_context_prompt(P["context"], size)
         run("context", item, prompt=prompt,
-            scorer=lambda r, e, s=P["context"]["secret"]: ((s.lower() in (r["content"] or "").lower()), "secret recalled" if s.lower() in (r["content"] or "").lower() else "secret missing"))
+            scorer=lambda r, e, s=P["context"]["secret"]: ((None, "error") if r.get("error") else ((s.lower() in norm(r["content"])), "secret recalled" if s.lower() in norm(r["content"]) else "secret missing")))
     for it in P["korean"]:
         if it.get("with_tools"):
             run("korean", it, tools=P["tools"], scorer=score_tool, expect=it["expect"])
