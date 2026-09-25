@@ -155,4 +155,9 @@ Commands (run only after Paul's go; `sudo` typed by Paul in his own terminal):
 7. `sudo reboot`; watch the monitor for the progress bar; wait up to 10 min; do not touch power.
 8. After: `uname -r` (5.15.199-tegra); `journalctl -b -u nv-l4t-bootloader-config` (deb version = QSPI version); `nvpmodel -q` (MAXN_SUPER); GPU max frequency 1,020,000 kHz (`cat /sys/class/devfreq/*gpu*/max_freq`); `nmcli device wifi list` works; `docker info` shows the nvidia runtime; `~/venvs/robot/bin/python -c "import pyrealsense2 as rs; print(rs.__version__)"`; `rs-enumerate-devices`; and the same `cudaMalloc` test: 4, 5 and 6 GiB must now succeed.
 
-Outcome: (not run yet)
+Outcome (2026-09-25, run by Paul by hand, step by step, with read-only checks from the Mac between steps): **done.**
+- Steps 1–5 as written. Step 1 needed a retry (a typed redirect failed with "No such file or directory"; the same line worked from the SSH tab; cause not identified). `apt-get dist-upgrade` ran detached 13:14–13:15 with no error lines; log `~/apt-dist-upgrade-36.5.2.log`: "Root device is set in the extlinux.conf", "Trigger Capsule update is done", initrd regenerated. `--fix-broken` had nothing to do.
+- Pre-reboot: `dpkg --audit` clean; all L4T packages 36.5.2; `extlinux.conf` byte-identical to the backup; `rtl8822ce.ko` and `rtk_btusb.ko` present for 5.15.199-tegra; capsule (49.8 MB) staged in `/boot/efi/EFI/UpdateCapsule/`.
+- Reboot 13:22, firmware progress screen, back at 13:23 (about 1.5 min).
+- After: kernel `5.15.199-tegra`; `/etc/nv_tegra_release` R36.5.2; `nv-l4t-bootloader-config`: deb 2360578 = QSPI 2360578; `nvpmodel` MAXN_SUPER with GPU `max_freq` 1,020,000,000 Hz (the 624 MHz regression did not happen); WiFi driver loaded, 47 networks scanned; Docker 29.8.1 active; `pyrealsense2` 2.58.4 imports and `rs-enumerate-devices` runs; screen blanking still off.
+- **CUDA allocation test: 4 GiB now succeeds** (failed before the upgrade). 5 GiB failed with the same NvMap error while `free` showed 4.7 GB free + 1.3 GB cache with the desktop running; whether that is a real memory limit or a remnant of the bug is checked next by dropping caches and retrying (needs sudo).

@@ -82,3 +82,17 @@ Pending (needs the camera): USB enumeration, depth/RGB streams, **IMU streams**,
 | CUDA allocation limit (R36.4.7 regression) | Python + `ctypes` on `/usr/local/cuda/lib64/libcudart.so.12`: `cudaMalloc` 1…6 GiB, free after each | 1, 2, 3 GiB ok; **4 GiB fails** (rc 2 out of memory, `NvMapMemAllocInternalTagged … error 12`) with 5.36 GiB reported free → the bug is present here; re-run after the 36.5.2 upgrade (preflight.md) |
 
 Consequence: no WiFi card purchase is needed; connecting is `nmcli device wifi connect <SSID>` (needs sudo) when the robot leaves the desk.
+
+## Checks after the R36.4.7 → R36.5.2 upgrade (2026-09-25) — all pass
+
+| Check | Command (on the Jetson) | Result |
+|---|---|---|
+| Kernel / release | `uname -r`; `head -1 /etc/nv_tegra_release` | `5.15.199-tegra`; R36.5.2 (GCID 46426093, 2026-07-16) |
+| Firmware = packages | `journalctl -b -u nv-l4t-bootloader-config` | deb 2360578 = QSPI 2360578 |
+| Boot config survived | `grep root= /boot/extlinux/extlinux.conf`; `diff` against `~/backup-36.4.7/extlinux.conf` | `root=/dev/nvme0n1p1`; identical |
+| Power mode / GPU clock | `nvpmodel -q`; `cat /sys/class/devfreq/17000000.gpu/max_freq` | MAXN_SUPER; 1,020,000,000 Hz (no 624 MHz cap) |
+| WiFi / Bluetooth drivers | `lsmod`; `nmcli device wifi list --rescan yes` | `rtl8822ce`, `rtk_btusb` loaded; 47 networks |
+| Docker | `docker --version`; `systemctl is-active docker` | 29.8.1; active |
+| RealSense library | venv `import pyrealsense2`; `rs-enumerate-devices` | 2.58.4; "No device detected" (camera not here yet) |
+| **CUDA allocation** | same `ctypes` `cudaMalloc` test as before | **1–4 GiB succeed** (4 GiB failed on 36.4.7); 5 GiB fails with 4.7 GB free + 1.3 GB cache and the desktop on — retest after `drop_caches` pending |
+| Memory baseline | `free -m` | 1,605 MB used, 5,759 MB available |

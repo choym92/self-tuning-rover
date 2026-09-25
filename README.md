@@ -21,7 +21,7 @@ Ground truth comes from AprilTags at surveyed positions; they are scaffolding, r
 
 ## Status (2026-09-24)
 
-- **Compute ready.** Jetson Orin Nano Super, JetPack 6.2.1 / L4T 36.4.7, booting from a 512 GB NVMe (moved from microSD without an Ubuntu host — see `docs/decisions.md`), MAXN_SUPER, SSH from the Mac.
+- **Compute ready.** Jetson Orin Nano Super, JetPack 6.2.3 / L4T 36.5.2 (upgraded from 36.4.7 on 2026-09-25 to fix a CUDA allocation regression), booting from a 512 GB NVMe (moved from microSD without an Ubuntu host — see `docs/decisions.md`), MAXN_SUPER, SSH from the Mac.
 - **Camera software ready.** librealsense 2.58.4 built with the RSUSB backend so the camera IMU works on the JetPack 6 kernel (which ships without HID sensor drivers); `pyrealsense2` importable in `~/venvs/robot`. The RealSense D436 was ordered on 2026-09-24.
 - **Base chosen (order pending).** Waveshare UGV Rover PT Jetson Orin AI Kit, "Acce" version (no Jetson): 6-wheel skid-steer aluminium chassis, four encoder motors with PID on an ESP32 sub-controller (JSON over serial, 660 pulses/rev), base IMU, 2-DOF pan-tilt with serial-bus servos, 3S 18650 UPS, audio board, gamepad and web app. Reasons and firmware facts in `docs/decisions.md`.
 - **Not started.** Logging, AprilTag, filter, controller, replay harness.
@@ -58,6 +58,7 @@ Software order: pan-tilt tracking loop (first tuning-by-replay experiment) → t
 - A `dd | head -c N | sha256sum` verification under `set -eo pipefail` dies silently of SIGPIPE; read an exact block count instead.
 - RealSense IMU models lose the IMU on JetPack 6 because the kernel is built without `HID_SENSOR_HUB`. Two routes: build librealsense with `FORCE_RSUSB_BACKEND=ON`, or add the missing HID sensor modules (`docs/decisions.md`).
 - The DP→HDMI output on this kit does not come back after screen blanking (nvidia-modeset VRR error); disable blanking.
+- L4T R36.4.7 (the October 2025 security update) limits CUDA allocations: a 4 GiB `cudaMalloc` fails with 5 GiB reported free. NVIDIA fixed it in R36.5; moving there is an apt source change plus `dist-upgrade`, no reflash (`docs/preflight.md`).
 
 ## Working rules
 

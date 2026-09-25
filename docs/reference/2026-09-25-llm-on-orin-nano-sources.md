@@ -102,7 +102,7 @@ Checked against primary sources on 2026-09-25 (adversarial verification pass).
 
 1. Any CUDA workload here (LLM, YOLO/TensorRT, a CUDA librealsense build) may hit the allocation limit; NVIDIA's own tests on 36.4.7 got llama3.2:3b running but "allocate 4G occasionally fails".
 2. Cheapest test on our board before deciding anything: in a container, `llama-bench -m <2B–3B Q4_K_M>.gguf -ngl 99` after dropping caches, and again with a second model loaded; a failure shows `NvMapMemAllocInternalTagged … error 12` then `cudaMalloc failed`.
-3. Open decision (not made): move to the `r36.5` repo (JetPack 6.2.3 / L4T 36.5.2) with a preflight like the 36.4.7 one, versus staying on 36.4.7 with the drop-caches stopgap. See decisions.md.
+3. Done the same day: upgraded to R36.5.2 by apt (preflight.md). After the upgrade the 4 GiB allocation succeeds; see verify.md.
 
 ## 7. Synthesis for our 8 GB board
 

@@ -199,3 +199,13 @@ Further reading after the RSUSB build: (1) librealsense issue #13020 (June 2024,
 - **WiFi** (`README-wifi.txt`): NetworkManager is preinstalled; `sudo nmcli device wifi connect 'SSID' password 'PASSWORD'` from SSH, or the desktop icon. Nothing about installing a card — the AC8265 (Intel 8265) uses the in-kernel `iwlwifi` driver.
 - **VNC** (`README-vnc.txt`): `vino` server, five `gsettings` lines, reboot; only runs after a local login unless auto-login is enabled; without a monitor the desktop defaults to 640×480 unless `/etc/X11/xorg.conf` gets a `Virtual` resolution. Option for running GUI tools (RealSense Depth Quality Tool) once the robot has no monitor; for the camera bring-up, keeping the monitor attached is simpler.
 - `version/`: copy of `/etc/nv_tegra_release` and the `nvidia-l4t-core` package status (R36.4.7).
+
+## 2026-09-25 — R36.4.7 → R36.5.2 (JetPack 6.2.3) by apt, done by hand
+
+Why: the R36.4.7 kernel's CUDA allocation regression reproduced here (4 GiB `cudaMalloc` failed with 5.36 GiB free). Preflight entry in `preflight.md`; sources in `reference/2026-09-25-llm-on-orin-nano-sources.md` section 6.
+
+What happened, in order: backups to `~/backup-36.4.7/` (one retry: a typed `dpkg -l > …` redirect failed with "No such file or directory" on the Jetson's own terminal, the identical line worked from the Mac's SSH tab; cause unknown, US keyboard, no input method) → apt source list `r36.4` → `r36.5` with `sed` → `apt update` (63 upgradable) → `apt-get dist-upgrade` detached, 13:14–13:15, 535 MB, no errors; the bootloader postinst printed "Root device is set in the extlinux.conf" and staged a 49.8 MB capsule → `--fix-broken` no-op → reboot 13:22 with the firmware progress screen → back 13:23.
+
+Verified after: kernel 5.15.199-tegra, R36.5.2, QSPI = packages (2360578), MAXN_SUPER with GPU max 1,020 MHz, WiFi/BT drivers loaded, Docker up, `pyrealsense2` 2.58.4 imports, `extlinux.conf` unchanged. `cudaMalloc` 4 GiB now succeeds; 5 GiB still fails with the desktop running (4.7 GB free + 1.3 GB cache) — drop-caches retest next.
+
+Lessons: `apt update` output "N packages can be upgraded" reads like "done" to a newcomer; it only refreshes the list. A detached `apt-get` returns the prompt immediately; "nothing happened" is expected, check `pgrep apt-get` and the log. The firmware step took about 1.5 minutes this time.
