@@ -178,6 +178,23 @@ Added by Paul (`sudo usermod -aG docker paulcho`) so the LLM comparison could be
 - Jev (TypeSafe AI, released 2026-09-15): a hosted "decision model" that returns calibrated probabilities/scores/choices, not text; very cheap but API-only, early access, one week old. Not for the on-robot loop; a possible candidate for Mac-side auto-labelling later. Watch only.
 - Training and the LLM tuning loop stay on the Mac or cloud; the Jetson GPU is for real-time inference.
 
+## On-robot LLM, first measurements (2026-09-25, evening) — recommendation, not yet a decision
+
+Three 2026 models were run on this board through the same harness (`jetson/llm/`), same server flags, same 37 prompts; full numbers in `verify.md`, every answer in `jetson/llm/results/*.md`.
+
+| | Nemotron 3 Nano 4B | Gemma 4 E2B | Qwen3.5 4B (thinking off) |
+|---|---|---|---|
+| Generation speed | 19.6 tok/s | **29.2** | 16.0 |
+| RAM 4k → 32k | 4.35 → 4.85 GB | 4.80 → 5.02 | 4.76 → 5.73 |
+| Tool calls (10) | 8 (two sign errors) | 8 (one asked back, one sign) | **9** (one sign) |
+| Honesty (5) | 5 | 5 | 5 |
+| Korean | works despite "English only" card; polite rewrite weak | fluent, polite | **best** |
+| Chat | good; one empty | good but refused arithmetic and a fact | good but refused a text-editing task |
+| Hygiene | words only | refused + words | refused; once looked down instead of stopping |
+| Extra | 262K context, hybrid (cheap memory) | text + image + **audio** input, 128K | image input (mmproj), 262K |
+
+Reading: all three are usable; none is clearly dominant. Qwen3.5 4B has the best judgement (tools, Korean) but is the slowest and the hungriest in memory; Gemma 4 E2B is the fastest and the only one with audio input, with a tendency to over-refuse under our prompt; Nemotron is a solid English-first middle with the cheapest long context. Everyone got "point the camera to the right" wrong in the same way (+pan), which says the tool description, not the models, needs fixing. **Recommendation (Paul to decide):** Gemma 4 E2B as the default on-robot model for phase 3 (speed + audio), Qwen3.5 4B with thinking off as the alternative when tool accuracy matters more than speed; re-run both with a softened system prompt and a fixed `look_at` description before locking in. Also decided by measurement: server flags `--ctx-checkpoints 0 --cache-ram 0` are mandatory on this 8 GB board (see verify.md), and thinking mode stays off on the robot.
+
 ## Deferred: manipulation arm (SO-101 + LeRobot) as a later phase (2026-09-24)
 
 - Candidate: SO-ARM101 (open-source 6-DOF arm, Feetech STS3215 bus servos — the same servo family as the rover kit's pan-tilt and Waveshare's RoArm-M2), used with Hugging Face LeRobot: teleoperate a follower arm with a leader arm to record demonstrations, train an ACT policy or fine-tune SmolVLA, run the policy. Seeed sells the Pro servo kit at $249.90 per arm (motors + board + cables; 3D-printed parts and cameras extra); a leader + follower pair plus prints and mounts is roughly $500–600.
