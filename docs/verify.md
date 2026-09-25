@@ -133,4 +133,14 @@ Hygiene (informational): Nemotron: "person fell" → "I will stop to avoid hitti
 
 Lesson from Gemma: the system prompt line "If you cannot know something, say so" made it refuse plain facts (arithmetic, capital of France). The prompt set stays fixed for the comparison; a follow-up run with a softer system prompt is worth doing before choosing.
 
-Memory vs context, Nemotron, run 1 flags (mmap load, checkpoints on): 4k 4,661 MB / 16k 4,947 / 32k 5,189 — near-flat because most layers are Mamba state. Re-measured with the standard flags below for every model.
+Memory vs context, standard flags (`-np 1 --load-mode none -b 512 -ub 512 -fa on --ctx-checkpoints 0 --cache-ram 0`), tegrastats RAM after load, desktop on (baseline without a server ≈ 1.5–2.1 GB):
+
+| Model | 4k | 16k | 32k | Growth 4k → 32k | Shape |
+|---|---|---|---|---|---|
+| Nemotron 3 Nano 4B (hybrid Mamba/attention) | 4,353 MB | 4,564 | 4,850 | +0.5 GB | near-flat |
+| Gemma 4 E2B (sliding-window + shared KV) | 4,798 MB | 4,902 | 5,024 | +0.2 GB | flat |
+| Qwen3.5 4B | 4,763 MB | 5,176 | 5,725 | +1.0 GB | steepest of the three, still fits at 32k |
+
+(Nemotron with the run-1 flags, mmap load and checkpoints on: 4k 4,661 / 16k 4,947 / 32k 5,189.)
+
+Speed (`llama-bench -ngl 99 -p 512 -n 128`, same for all): Nemotron 3 Nano 4B pp 582 / tg **19.6** tok/s; Gemma 4 E2B pp 1,049 / tg **29.2**; Qwen3.5 4B (4.21 B params, 2.54 GiB) pp 484 / tg **16.6**.
