@@ -13,13 +13,13 @@ Everything here runs in a Docker container built from `Dockerfile` (llama.cpp wi
 
 ## Run
 
-Standard server flags for every comparison run (decided 2026-09-25 after the first run was OOM-killed): one slot, `--load-mode none` (no mmap, so the weights are not held twice), `-b 512 -ub 512` (smaller compute buffers), `-fa on` (flash attention). Context 4096 for the harness; 4096 / 16384 / 32768 for the memory curve.
+Standard server flags for every comparison run (decided 2026-09-25 after the first run was OOM-killed): one slot, `--load-mode none` (no mmap, so the weights are not held twice), `-b 512 -ub 512` (smaller compute buffers), `-fa on` (flash attention). Plus `--ctx-checkpoints 0 --cache-ram 0`: measured 2026-09-25 on Nemotron 3 Nano 4B, the defaults (up to 32 recurrent-state checkpoints per slot, and a prompt cache with an 8 GiB ceiling) grew RAM by about 245 MB per request until the kernel killed the server; with both off, 16 requests moved RAM by 17 MB. Context 4096 for the harness; 4096 / 16384 / 32768 for the memory curve.
 
 On the Jetson (terminal A), serve one model:
 
 ```
 sudo docker run --runtime nvidia --rm -p 127.0.0.1:8080:8080 -v /home/paulcho/models:/models \
-  rover/llama_cpp:v0.5.0 llama-server -m /models/<file>.gguf -ngl 99 -np 1 -c 4096 --load-mode none -b 512 -ub 512 -fa on --host 0.0.0.0 --port 8080
+  rover/llama_cpp:v0.5.0 llama-server -m /models/<file>.gguf -ngl 99 -np 1 -c 4096 --load-mode none -b 512 -ub 512 -fa on --ctx-checkpoints 0 --cache-ram 0 --host 0.0.0.0 --port 8080
 ```
 
 On the Mac, open a tunnel in one terminal and keep it open:

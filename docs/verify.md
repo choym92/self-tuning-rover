@@ -108,3 +108,16 @@ Setup: image `rover/llama_cpp:v0.5.0` (built from `jetson/llm/Dockerfile` on the
 `VMM: no` is the device's own answer: the Orin does not support CUDA virtual memory management, so building with `GGML_CUDA_NO_VMM=ON` changes nothing at run time (this was an inference in the preflight; now measured).
 
 Pending for each model: RAM at 4k / 16k context (`tegrastats`), max temperature, and the chat + tool-call harness (see preflight, step 9).
+
+### Why the first harness runs were OOM-killed, and the fix (2026-09-25, measured)
+
+Both runs of the harness on Nemotron 3 Nano 4B died at the 15th request: the kernel log shows `Out of memory: Killed process … llama-server` (17:05:06 and 17:30:06), and the tegrastats log of run 2 shows RAM rising in steps from 4,822 MB to 7,422 MB over 65 s (≈ 245 MB per request) while the server process itself stayed at 3.4 GB anon RSS, i.e. the growth was GPU-side (nvmap) memory. Probe: 8–16 short chat requests, RAM read from tegrastats after each, server at 4k context, one slot, `--load-mode none -b 512 -ub 512`.
+
+| Server flags | RAM after load | Growth per request | Result |
+|---|---|---|---|
+| defaults + `-fa on` (+ `GGML_CUDA_DISABLE_GRAPHS=1`) | 4,315 MB | ≈ 245 MB | 7,153 MB after 12 → stopped (CUDA graphs are not the cause) |
+| `-fa off` | 4,555 MB | ≈ 245 MB | same growth (flash attention is not the cause) |
+| `-fa on --ctx-checkpoints 0` | 4,322 MB | ≈ 85 MB | still growing |
+| `-fa on --ctx-checkpoints 0 --cache-ram 0` | 4,327 MB | ≈ 1 MB | **flat: 4,344 MB after 16 requests** |
+
+Cause: two llama-server v0.5.0 defaults that assume a big machine — up to 32 context checkpoints per slot (for recurrent/hybrid models each checkpoint is a copy of the state) and a prompt cache with an 8,192 MiB ceiling. On an 8 GB board they accumulate until the kernel kills the server. Standard flags for every comparison run from now on: `-np 1 -c <ctx> --load-mode none -b 512 -ub 512 -fa on --ctx-checkpoints 0 --cache-ram 0`. Not yet known: whether a plain transformer (Qwen, Gemma) shows the same growth with the defaults; the standard flags are used for all models regardless.
