@@ -41,7 +41,8 @@ Software order: pan-tilt tracking loop (first tuning-by-replay experiment) → t
 
 | Path | Contents |
 |---|---|
-| [AGENTS.md](AGENTS.md) | Briefing for any coding agent or new collaborator: how to reach the Jetson, the working rules, where to look, current state |
+| [AGENTS.md](AGENTS.md) / [CLAUDE.md](CLAUDE.md) | Shared agent rules; Claude imports the same canonical instructions instead of maintaining a copy |
+| [docs/STATUS.md](docs/STATUS.md) | Short current handoff: verified platform, active work, next steps and live-state checks |
 | [docs/setup-log.md](docs/setup-log.md) | Dated log of every setup step, including what went wrong and why |
 | [docs/decisions.md](docs/decisions.md) | Decisions and their reasons, hardest-to-reverse first |
 | [docs/preflight.md](docs/preflight.md) | Checks written *before* each device-changing step: official sources, device facts, VERIFIED vs INFERENCE, fallback |
