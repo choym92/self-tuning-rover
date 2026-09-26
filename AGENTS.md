@@ -58,7 +58,26 @@ docker run -d --name llm --runtime nvidia -p 127.0.0.1:8080:8080 -v /home/paulch
 
 - Harness from the Mac: `ssh -f -N -L 18080:127.0.0.1:8080 paulcho@192.168.1.234`, then `python3 jetson/llm/harness.py --url http://127.0.0.1:18080 --label <model-label>`; render tables with `python3 jetson/llm/render_results.py`. Stop the server with `docker rm -f llm`.
 - Results so far: Nemotron 19.6 tok/s, Gemma 29.2, Qwen 16.0 (llama-bench). Tools 8/10, 8/10, 9–10/10. All honest 5/5. Korean works on all three (Qwen best). All three "think" by default; thinking must be off on the robot (`--reasoning off` works for all three, verified). Gemma and Nemotron have not yet been re-run with thinking off; Qwen has. Recommendation recorded in `docs/decisions.md` (Gemma default, Qwen alternative), **not decided by Paul yet**.
-- Open tasks, in order: (1) re-run Gemma and Nemotron with `--reasoning off` for a fair round; (2) prompt set v2: a system-prompt line that general questions and text tasks are fine, and a clearer `look_at` description (all three got "camera to the right" wrong the same way); (3) speech pipeline prep without hardware: whisper.cpp CUDA in a container, Piper TTS (check Korean voices), WAV → whisper → LLM → Piper, measure latency and memory; (4) undo the docker group.
+- Open tasks, in order: (1) re-run Gemma and Nemotron with `--reasoning off` for a fair round; (2) prompt set v2: a system-prompt line that general questions and text tasks are fine, and a clearer `look_at` description (all three got "camera to the right" wrong the same way); (3) finish the compact English STT baseline, then design contracts/fake robot API, VAD and wake word as ordered in `docs/voice-orchestration.md`; (4) Piper/TTS and LLM connection only after the routing/safety boundary; (5) undo the docker group.
+
+## State of the voice work (2026-09-25 late evening)
+
+- Image/model on Jetson: `rover/whisper:v1.9.4` (10.4 GB) and
+  `/home/paulcho/models/ggml-base.bin` (147,951,465 bytes, checksum verified).
+- Running experiment at last check: `rover-stt` on Jetson loopback 8090 and an
+  SSH tunnel on Mac loopback 18090. Do not assume they survived a new session;
+  check `docker ps` and the local port first.
+- English-only is decided. The first live English utterance, `Hey Jetson, how's
+  the weather today?`, was correct: 0.500 s Whisper API time and 0.553 s from
+  final audio upload to result. Details are in `docs/verify.md` and
+  `docs/setup-log.md`.
+- Current capture is a fixed eight seconds. Wake detection, VAD, routing, LLM,
+  TTS and robot action are not implemented. The working architecture, safety
+  boundary, implementation order and open UX decisions are in
+  `docs/voice-orchestration.md`.
+- `jetson/voice/results/` contains local raw transcript/timing JSONL and is
+  intentionally gitignored. Durable measured results belong in
+  `docs/verify.md`.
 
 ## Coming hardware steps (when parts arrive)
 

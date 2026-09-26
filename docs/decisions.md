@@ -165,6 +165,12 @@ Sources: store.realsenseai.com product pages, stereolabs.com, OpenELAB Orbbec-vs
 - Hardware: **Seeed reSpeaker XVF3800 USB mic array** (4 mics, XMOS DSP: beamforming, noise suppression, acoustic echo cancellation, direction of arrival up to ~5 m, USB Audio Class = no driver) plus a small speaker. Chosen over conference speakerphones (Jabra Speak 510, Anker PowerConf S3) because of motor/fan noise next to the mic, 2–3 m talking distance, hearing while the robot speaks (AEC), and DoA so the robot can turn toward the speaker. Price to be checked at purchase.
 - Software, all local on the Orin Nano Super (2026 write-ups exist for this exact board): whisper.cpp with CUDA or faster-whisper for speech-to-text (≈1–2 s for 20 s of audio), Piper for text-to-speech (sub-second), optionally a small local LLM through Ollama for command understanding.
 - Order: after the camera and the base.
+- **English-only selected 2026-09-25.** The first live Mac-microphone → Jetson
+  whisper.cpp `base/en` run recognized `Hey Jetson, how's the weather today?`
+  correctly with 0.50 s inference and 0.55 s from final audio upload to result.
+  Wake word, VAD and robot action are not implemented. The proposed thin
+  orchestrator and independent motion-safety boundary are documented in
+  `voice-orchestration.md`; its open UX questions remain undecided.
 
 ## Temporary: `paulcho` in the `docker` group for the LLM test day (2026-09-25)
 

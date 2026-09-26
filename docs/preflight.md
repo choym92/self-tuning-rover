@@ -221,3 +221,82 @@ Commands (one at a time, Paul types; expected output after each):
 11. Cleanup when done (or keep for later): `sudo docker rmi rover/llama_cpp:v0.5.0 nvcr.io/nvidia/l4t-jetpack:r36.4.0`; models can stay in `~/models`.
 
 Outcome: (not run yet)
+
+---
+
+## Whisper base: live Mac audio to Jetson CUDA container (2026-09-25)
+
+Goal: send live Mac microphone PCM through SSH to the Jetson, transcribe Korean
+using multilingual Whisper base, and record transport and processing durations.
+Preparation, container build, model download, service startup and the first live
+microphone checks all completed on 2026-09-25. Paul then chose English-only use.
+
+Exact versions: Jetson Orin Nano Super 8 GB, R36.5.2 / kernel 5.15.199-tegra /
+CUDA 12.6 / aarch64; Docker 29.8.1; base image
+`nvcr.io/nvidia/l4t-jetpack:r36.4.0`; whisper.cpp pinned to `v1.9.4`;
+multilingual `ggml-base.bin` (142 MiB); Mac FFmpeg 8.1.1.
+
+Official sources (read 2026-09-25):
+- [Pinned CUDA build instructions](https://github.com/ggml-org/whisper.cpp/blob/v1.9.4/README.md): CUDA backend via `GGML_CUDA=ON`.
+- [Pinned CUDA CMake](https://github.com/ggml-org/whisper.cpp/blob/v1.9.4/ggml/src/ggml-cuda/CMakeLists.txt): explicit architecture supported; `GGML_CUDA_NO_VMM` avoids the direct CUDA driver link.
+- [Pinned HTTP server source](https://github.com/ggml-org/whisper.cpp/blob/v1.9.4/examples/server/server.cpp): `/health`, multipart `/inference`, request language, JSON text response; the model remains loaded.
+- [Pinned model list](https://github.com/ggml-org/whisper.cpp/blob/v1.9.4/models/README.md): base is multilingual; SHA-1 `465707469ff3a37a2b9b8d8f89f2f99de7299dac`.
+- [JetPack base image](https://catalog.ngc.nvidia.com/orgs/nvidia/containers/l4t-jetpack): same base already used by our measured llama.cpp image.
+
+Known-issues search:
+- [whisper.cpp #1950](https://github.com/ggml-org/whisper.cpp/issues/1950): older Orin/CUDA 11.4 build failed with architecture `all`.
+- [#2402](https://github.com/ggml-org/whisper.cpp/issues/2402): older Xavier/Orin first-load delay report. Neither report proves v1.9.4 has the same defect. Explicit `87` is an appropriate target, not a guarantee that it resolves every startup issue.
+- [#3819](https://github.com/ggml-org/whisper.cpp/issues/3819): multipart WAV decoding issue. VERIFIED: v1.9.4 source uses the memory buffer and its length in the non-FFmpeg path. End-to-end WAV decoding still requires a real container test.
+- [#3595](https://github.com/ggml-org/whisper.cpp/issues/3595): stale/crashing VAD responses in previous versions. This baseline does not enable server VAD; test silence and sequential utterances on real hardware before enabling it.
+
+| Assumption | Evidence | Status |
+|---|---|---|
+| Device/version | Earlier read-only SSH in this session: `/etc/nv_tegra_release` R36.5.2; `uname -r` 5.15.199-tegra; `uname -m` aarch64 | VERIFIED snapshot, re-check before build |
+| Memory/disk headroom | Same SSH: `free -m` total 7607, available 6376, swap used 704 MB; `df -h` 409G available | VERIFIED snapshot; concurrent STT/LLM fit unmeasured |
+| Existing Docker/base | Same SSH: Docker 29.8.1; images include r36.4.0 and rover/llama_cpp:v0.5.0 | VERIFIED |
+| Container build fits | Two-job build completed without host changes; resulting image is 10,357,378,280 bytes | VERIFIED |
+| Architecture and driver linking | Build reached 100% for `libggml-cuda.so` and `whisper-server`; runtime found Orin compute capability 8.7 and used CUDA0 | VERIFIED |
+| Input hardware | Jetson `arecord -l` listed APE interfaces only; Mac `ffmpeg -version` 8.1.1 | VERIFIED; actual Mac mic capture/permission still untested |
+| Base is sufficient for English requests | `Hey Jetson, how's the weather today?` transcribed correctly in the first English run | VERIFIED for one quiet-room utterance only |
+| Network timing | Tunnel RTT 15 ms in the English run; final-send receipt ack 4.8 ms | VERIFIED for one LAN run |
+
+Design: fixed 8s capture window (max 30s), PCM streamed while speaking; inference
+starts after capture. This isolates STT before wake-word/VAD work. No pure
+one-way latency claim: clocks are unsynchronized. `server_inference_api_s`
+includes local API/decoding overhead. See `jetson/voice/README.md` for fields.
+
+Reversibility / fallback: dependencies are inside a new Docker image only;
+build files/logs under `/home/paulcho/llm/voice`, model under
+`/home/paulcho/models`. Publish only `127.0.0.1:8090` with an SSH tunnel. Stop
+`rover-stt` to release resources. Preserve the shared base image and LLM files.
+If build/link/GPU initialization fails, inspect logs and revise the container;
+do not install drivers/packages, edit services or add swap on the host.
+
+Adversarial review: no separate agent needed for this reversible preparation.
+Local review focuses on bounded input, truncated streams, failed inference,
+repeated requests and honestly defined timing measurements.
+
+Commands: staged in `jetson/voice/README.md`. `build.sh` defaults to read-only
+`--check` and guards OS, architecture, hostname, release/kernel, staging path,
+Docker runtime, existing base image and disk space. `--build` is a separate
+explicit action. Model download refuses existing final/partial files and checks
+the upstream checksum. Paul supplies sudo himself if Docker access is revoked.
+
+Local validation: four fake-backend transport tests passed (repeated
+transcripts/JSONL, oversized input, truncated input, backend failure). Bash
+syntax passed. On the Mac, `build.sh --check` refused with exit 1 and
+`Refusing: expected Linux aarch64 Jetson`, as intended. The successful Jetson
+guard path then passed. Tests alone do not prove real Whisper inference; the
+live run below does.
+
+Outcome: built `rover/whisper:v1.9.4` (`f6a6c35a63bd`, 10.4 GB), downloaded and
+verified `/home/paulcho/models/ggml-base.bin` (147,951,465 bytes; published
+SHA-1 `465707469ff3a37a2b9b8d8f89f2f99de7299dac`), and started `rover-stt` on
+Jetson loopback port 8090. Startup showed Orin sm_87, `use gpu = 1`, CUDA0,
+base model and `Ready`. The Mac tunnel used loopback port 18090. The first
+English live run correctly returned `Hey Jetson, how's the weather today?`;
+Whisper API time 0.500 s, post-capture result 0.553 s, tunnel RTT 0.015 s.
+The fixed eight seconds of audio took 9.24 s wall time to capture/send; this
+Mac AVFoundation pacing discrepancy remains to be explained and does not
+represent end-of-speech UX. Wake word, VAD, final microphone and noise tests
+remain UNVERIFIED.

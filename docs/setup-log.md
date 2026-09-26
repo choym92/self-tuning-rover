@@ -211,3 +211,30 @@ Verified after: kernel 5.15.199-tegra, R36.5.2, QSPI = packages (2360578), MAXN_
 Lessons: `apt update` output "N packages can be upgraded" reads like "done" to a newcomer; it only refreshes the list. A detached `apt-get` returns the prompt immediately; "nothing happened" is expected, check `pgrep apt-get` and the log. The firmware step took about 1.5 minutes this time.
 
 Note (2026-09-25 13:24, first desktop login after the upgrade): Ubuntu showed "System program problem detected". Cause read from the device: `/usr/sbin/nvargus-daemon` (NVIDIA's CSI camera service) crashed at 13:24:23 when GStreamer's `gst-plugin-scanner` connected to it during login; journal: `SCF: Error ResourceError: Unable to open BW Ioctl FD (PowerServiceCore.cpp)`; systemd restarted it two seconds later and it has stayed up. No CSI camera is attached (`/dev/video*` absent) and nothing we use talks to Argus (the RealSense path is USB/libusb), so this is harmless for us. Crash record: `/var/crash/_usr_sbin_nvargus-daemon.0.crash` (root-only); the dialog repeats at login until that file is removed. Watch item: does it recur on the next reboot? Not a known-issue match found on NVIDIA's forum for R36.5.2 yet (only older threads with a camera attached). VERIFIED: what crashed and why it was triggered; INFERENCE: that it is a no-camera quirk of this release.
+
+## 2026-09-25 evening — first live Whisper STT on the Jetson
+
+- Prepared `jetson/voice/`: whisper.cpp v1.9.4 CUDA Dockerfile fixed to Orin
+  compute capability 8.7, guarded build script, bounded PCM bridge, Mac
+  AVFoundation client, timing fields and four fake-backend transport tests.
+- Staged it at `~/llm/voice`; guarded checks passed. The build took about
+  39 minutes and produced `rover/whisper:v1.9.4` (`f6a6c35a63bd`, 10.4 GB).
+  Its runtime check found one Orin CUDA device with 7607 MiB VRAM.
+- Downloaded multilingual `ggml-base.bin` (147,951,465 bytes) and verified the
+  published SHA-1 `465707469ff3a37a2b9b8d8f89f2f99de7299dac` before renaming it.
+- Started `rover-stt` on Jetson loopback 8090 and an SSH tunnel on Mac loopback
+  18090. Logs verified sm_87, CUDA0, GPU use, base model and ready state.
+- First microphone attempt exposed a client bug: FFmpeg's fixed `-t 8` output
+  ended slightly before the exact declared PCM byte count, with no stderr. The
+  client now reads the exact bounded byte count and then terminates FFmpeg; all
+  four transport tests still pass.
+- First Korean-forced run transcribed English `Hey Jetson` as Korean phonetics.
+  Paul chose English-only use. The bridge was made language-configurable,
+  defaulted to `en`, rebuilt from cache and restarted.
+- First English run correctly returned `Hey Jetson, how's the weather today?`.
+  Measured: tunnel RTT 15 ms, final-send ack 4.8 ms, Whisper API 0.500 s,
+  post-capture result 0.553 s, total 9.82 s. Eight audio seconds took 9.24 s
+  wall time to capture/send; investigate the Mac capture pacing separately.
+- Proposed architecture and undecided UX questions are in
+  `docs/voice-orchestration.md`. No wake detector, VAD, LLM connection or robot
+  action exists yet.

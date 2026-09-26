@@ -50,6 +50,8 @@ Software order: pan-tilt tracking loop (first tuning-by-replay experiment) → t
 | [docs/reference/](docs/reference/) | Dated research snapshots kept for reuse: NVIDIA devkit guide review (2026-09-23), parts-build BOM (2026-09-22), software plan (2026-09-22), lessons from other builds (2026-09-24), sources on running small LLMs on this board incl. the R36.4.7 CUDA allocation regression (2026-09-25). Not maintained; decisions.md is current |
 | [scripts/](scripts/) | Guarded scripts: microSD flashing from a Mac, NVMe install on the Jetson |
 | [jetson/](jetson/) | Code that runs on the robot (`requirements.txt` documents the Python environment) |
+| [jetson/voice/](jetson/voice/README.md) | Live Mac microphone → Jetson Whisper base/en; CUDA build and first live transcript verified, wake word/VAD pending |
+| [docs/voice-orchestration.md](docs/voice-orchestration.md) | Working voice/orchestration architecture, safety boundary, phased implementation and open UX decisions |
 | [tools/](tools/) | Replay, scoring and tuning tools that run on the Mac (empty for now) |
 
 ## Things learned so far that are hard to find elsewhere
