@@ -207,3 +207,23 @@ Reading: all three are usable; none is clearly dominant. Qwen3.5 4B has the best
 - Feasibility on our hardware (2026 sources): a bimanual SO-101 ACT setup has been run entirely on a Jetson Orin Nano Super 8 GB with training offloaded to a desktop GPU (arXiv 2608.03938); Seeed's wiki documents SO-101 + LeRobot on Orin Nano JetPack 6.2; LeRobot trains with `policy.device=mps` on Apple Silicon (slower than CUDA) and there is an MLX SmolVLA runtime for Macs.
 - Known friction from practitioner reports: Linux required for the toolchain (our Jetson qualifies; VMs choke on USB cameras), assign servo IDs one by one during assembly, the kit clamps are too small for a desk, ~1 hour of teleop per 50 episodes, 2–4 hours of training per policy, and success rates below 90% are normal.
 - Decision: not now. It is the "learned policy" half of the portfolio and belongs after the rover's localization, evaluation harness and navigation phases. When it comes, our replay/scoring harness applies unchanged: success rate on held-out object positions is the metric. Deformable objects (cloth folding) stay out of scope — that is research-frontier work even for well-funded labs.
+
+## Agent documentation and decision review (2026-09-25, decided)
+
+- `AGENTS.md` is the only agent-policy source; `CLAUDE.md` imports it rather
+  than copying it. `docs/STATUS.md` is a short derived handoff, while decisions,
+  measurements, preflight evidence and incident history keep separate canonical
+  files that agents read only when relevant.
+- Multi-agent review is reserved for consequential choices with credible
+  alternatives: hard-to-reverse architecture or device changes, safety,
+  security, privacy and high cost. The default is one proposer plus one
+  independent adversarial reviewer, followed by coordinator synthesis. Agent
+  agreement is not verification and Paul remains the decision owner.
+- Routine implementation, tests, documentation, status maintenance and an
+  already-decided runbook do not require debate. Only the final rationale and
+  material dissent are retained; debate transcripts are not repository records.
+- Explicit step-by-step approval remains mandatory for device/system mutations
+  and costly or irreversible actions. Authorized reversible repository edits,
+  read-only checks and tests may be completed coherently without repeated stops.
+- In concurrent agent work, the coordinating agent alone integrates, commits
+  and pushes. This avoids shared-checkout conflicts and partial handoffs.

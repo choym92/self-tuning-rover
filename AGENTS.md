@@ -49,9 +49,11 @@ while the NVMe system is running; their filesystem UUIDs are identical.
 
 ## Rules that are not negotiable
 
-1. **One step at a time.** Propose, get an explicit go, run one step, report
-   what actually happened, then propose the next. Do not run ahead or record a
-   decision Paul has not made.
+1. **One device-changing step at a time.** Before a device/system mutation or
+   costly/irreversible action, propose the exact step, get Paul's explicit go,
+   run it, report what happened, then propose the next. Within an already
+   authorized repository task, batch reversible edits, read-only checks, tests
+   and documentation as needed. Never record a decision Paul has not made.
 2. **Preflight before a device/system change.** For host installs, boot config,
    firmware, kernel, services or similar changes, follow `docs/preflight.md`:
    exact-version source, known issues, read-only facts, VERIFIED vs INFERENCE,
@@ -62,9 +64,26 @@ while the NVMe system is running; their filesystem UUIDs are identical.
 4. **Report faithfully.** Include failures and unverified assumptions. Never
    turn a plan, recommendation, order or inference into a completed fact.
 5. **Commits:** English, plain messages, no AI signature or co-author line.
-   Push completed work to `origin main` after verification.
+   Push completed work to `origin main` only after verification. When multiple
+   agents share the checkout, only the coordinating agent commits or pushes;
+   all agents preserve the edits made by others.
 6. Never edit a running script. Reddit is blocked; do not try workarounds.
 7. Files in the separate CS7638 course repository are off limits.
+
+## Decision review
+
+For a hard-to-reverse architecture, device, safety, security, privacy or
+high-cost choice with multiple credible options, use at least two agents when
+capacity permits: one proposer and one adversarial reviewer. The proposer
+compares viable options and evidence. The reviewer independently inspects the
+evidence and challenges assumptions, failure modes and cheaper alternatives.
+The coordinating agent synthesizes the result, preserves material disagreement
+and leaves genuinely user-owned choices to Paul. Agreement is not proof.
+
+Do not use multi-agent review for routine implementation, documentation,
+verification, status maintenance or execution of an already-decided plan.
+Store only the final decision and rationale in `docs/decisions.md`; do not store
+agent transcripts. Follow an explicit request from Paul for broader debate.
 
 ## Documentation discipline
 
@@ -78,12 +97,19 @@ Each fact has one canonical home:
 - subsystem architecture → its design document
 - dated external research → `docs/reference/`
 
-Link to the canonical fact instead of copying values into multiple files. Mark
-items as PROPOSED, DECIDED, VERIFIED, SUPERSEDED or STALE when ambiguity is
-possible. A date alone does not make a claim current.
+`docs/STATUS.md` is a short derived dashboard, not an evidence source. Update
+the canonical decision, measurement or incident record first and update
+`STATUS.md` last, only when the active objective, verified capability, blocker
+or next step materially changes. If it conflicts with canonical evidence or a
+live read-only check, the canonical evidence or live check wins.
 
-At the end of meaningful work: update `STATUS.md`; update `verify.md` only for
-new measurements; update `decisions.md` only for a real decision; append to the
-setup log only when execution history will help later debugging. Keep raw or
-private experiment output gitignored and summarize durable results in
-`verify.md`.
+Link to the canonical fact instead of copying detailed values into multiple
+files. Use decision-lifecycle labels (`PROPOSED`, `DECIDED`, `SUPERSEDED`)
+separately from evidence labels (`VERIFIED`, `INFERENCE`, `UNVERIFIED`) when the
+distinction matters. `STALE` is a freshness warning. A decision is not
+automatically verified, and verified runtime state is not assumed current.
+
+Update `verify.md` only for new measurements, `decisions.md` only for a real
+decision, and the setup log only when execution history will help later
+debugging. Keep raw or private experiment output gitignored and summarize
+durable results in `verify.md`.

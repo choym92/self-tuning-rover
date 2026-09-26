@@ -37,7 +37,7 @@ lsof -nP -iTCP:18090 -sTCP:LISTEN
   routing, TTS, LLM connection and robot action are not implemented.
 - PROPOSED architecture and open UX decisions:
   `docs/voice-orchestration.md`.
-- Live state at the last observation: `rover-stt` used Jetson loopback 8090 and
+- LAST OBSERVED 2026-09-25 22:58 EDT: `rover-stt` used Jetson loopback 8090 and
   the Mac tunnel used loopback 18090. Re-check with the commands above.
 
 Next steps:
@@ -47,7 +47,6 @@ Next steps:
 2. Decide the first interaction: wake → acknowledgement → command, or support a
    one-breath wake phrase plus command immediately.
 3. Define typed command/state contracts and test them against a fake robot API.
-4. Replace fixed capture with VAD/end-of-speech, then add wake word and pre-roll.
 
 ## LLM work
 

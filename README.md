@@ -19,23 +19,19 @@ Wheel encoders (control input) ────────────────�
 
 Ground truth comes from AprilTags at surveyed positions; they are scaffolding, removed once a vision-only estimate can be scored against them.
 
-## Status (2026-09-24)
+## Current state and plans
 
-- **Compute ready.** Jetson Orin Nano Super, JetPack 6.2.3 / L4T 36.5.2 (upgraded from 36.4.7 on 2026-09-25 to fix a CUDA allocation regression), booting from a 512 GB NVMe (moved from microSD without an Ubuntu host — see `docs/decisions.md`), MAXN_SUPER, SSH from the Mac.
-- **Camera software ready.** librealsense 2.58.4 built with the RSUSB backend so the camera IMU works on the JetPack 6 kernel (which ships without HID sensor drivers); `pyrealsense2` importable in `~/venvs/robot`. The RealSense D436 was ordered on 2026-09-24.
-- **Base chosen (order pending).** Waveshare UGV Rover PT Jetson Orin AI Kit, "Acce" version (no Jetson): 6-wheel skid-steer aluminium chassis, four encoder motors with PID on an ESP32 sub-controller (JSON over serial, 660 pulses/rev), base IMU, 2-DOF pan-tilt with serial-bus servos, 3S 18650 UPS, audio board, gamepad and web app. Reasons and firmware facts in `docs/decisions.md`.
-- **Not started.** Logging, AprilTag, filter, controller, replay harness.
+Mutable state is kept out of this overview so it cannot silently go stale:
 
-## Next steps
+- current handoff and next actions: [`docs/STATUS.md`](docs/STATUS.md)
+- purchase and parts status: [`docs/build-spec.md`](docs/build-spec.md)
+- measured hardware/software results: [`docs/verify.md`](docs/verify.md)
+- accepted and proposed choices: [`docs/decisions.md`](docs/decisions.md)
 
-| Buy | Then, when it arrives |
-|---|---|
-| RealSense D436 — ordered | Plug into a USB 3 port → `rs-enumerate-devices` → depth + RGB streams → **IMU at 200 Hz for 10 min with no frame drops** (Route A; else Route B in decisions.md) → Depth Quality Tool → first recorded `.bag` → pan-tilt visual tracking demo (milestone 0) |
-| UGV Rover PT Jetson Orin AI Kit Acce (Waveshare, SKU 27772) + 3× 18650 cells + charger | Mount the Jetson devkit board, confirm 12 V feed → gamepad teleop → read the `T:1001` feedback stream (wheel speeds, odometry, IMU) → first timestamped logs → encoder counts per revolution, 1 m push test (see verify.md) |
-| WiFi card: Waveshare AW-CB375NF (RTL8822CE, antennas included) — when the base is close | Check `modinfo rtl8822ce` first; power off, seat the card under the module, antennas on the chassis rail → `nmcli device wifi connect` → DHCP reservation → SSH alias |
-| Later: 2D lidar (D500 or RPLidar C1, ~$100) only if VSLAM proves fragile; reSpeaker mic array only if the kit's audio board is not enough | — |
-
-Software order: pan-tilt tracking loop (first tuning-by-replay experiment) → timestamped logging → AprilTag range/bearing → Kalman filter → wheel PID → Mac replay harness → tuning loop → VSLAM / navigation.
+The stable development direction is pan-tilt tracking → timestamped logging →
+AprilTag range/bearing → state estimation → wheel control → Mac replay and
+scoring → parameter tuning → VSLAM/navigation. The current order within that
+direction belongs in `docs/STATUS.md`.
 
 ## What is in this repository
 
