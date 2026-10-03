@@ -64,8 +64,9 @@ Next steps:
 
 ## Hardware
 
-- RealSense D436: ordered, not yet hardware-validated. Arrival procedure is in
-  `README.md`; the RSUSB build is documented in `docs/setup-log.md`.
+- RealSense D436: arrived; first live depth + color + IMU check passed on the
+  Jetson over USB 3 on 2026-10-03 (`docs/verify.md`). Still to do: the 10-minute
+  200 Hz IMU drop test and Depth Quality Tool. The Mac is not a usable live host.
 - Waveshare UGV Rover PT Acce: selected but repository status says not ordered.
   Never promote the hypothetical assembled-rover discussion to a purchase fact.
 - Final microphone: not purchased. Test the Waveshare audio board first; the

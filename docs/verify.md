@@ -165,3 +165,16 @@ Memory vs context, standard flags (`-np 1 --load-mode none -b 512 -ub 512 -fa on
 (Nemotron with the run-1 flags, mmap load and checkpoints on: 4k 4,661 / 16k 4,947 / 32k 5,189.)
 
 Speed (`llama-bench -ngl 99 -p 512 -n 128`, same for all): Nemotron 3 Nano 4B pp 582 / tg **19.6** tok/s; Gemma 4 E2B pp 1,049 / tg **29.2**; Qwen3.5 4B (4.21 B params, 2.54 GiB) pp 484 / tg **16.6**.
+
+## RealSense D436 first hardware checks (2026-10-02 Mac, 2026-10-03 Jetson)
+
+| Check | Command / method | Result |
+|---|---|---|
+| Identity | `rs-enumerate-devices -s` | RealSense D436, serial 263022071396, firmware 5.17.0.214 (same on Mac and Jetson) |
+| Jetson USB link | `lsusb -t` | 5000M (USB 3) on a Jetson USB-A port with the camera's own C-to-A cable; product ID `8086:1156` |
+| Jetson streams offered (RSUSB build 2.58.4) | `rs-enumerate-devices` | Depth Z16 up to 1280x720 (848x480 up to 90 fps), Color RGB8 (848x480 up to 60 fps), **Motion Module present** (gyro 200/400 Hz) |
+| Live depth + color + IMU, 5 s | `jetson/camera/d436_check.py` (system Python 3.10 + `PYTHONPATH=~/src/librealsense/build/Release`; the robot venv has no numpy) | 848x480 depth aligned to color; 92% valid pixels, 0.27–3.63 m; 5x5 center block 0.511–0.515 m (flat surface); measured 24 fps depth and color at a 30 fps request; accel 96 Hz, gyro 188 Hz; at rest accel norm 9.53 m/s² (expect ~9.81), gyro mean ~0.01–0.02 rad/s |
+| Mac (macOS 26, Apple Silicon), Homebrew librealsense 2.58.4 | `rs-capture`, `rs-distance`, `rs-record` | Depth window appeared once in about six attempts; otherwise `failed to claim usb interface … RS2_USB_STATUS_ACCESS`. IORegistry showed Logitech G HUB, Chrome and the ChatGPT app holding user clients on the camera, and the HID (IMU) interface owned exclusively by macOS. C-to-C cable ran at USB 2. Conclusion: the Mac is not a usable live host; it is fine for analysing recordings |
+
+Open: the 24 fps vs 30 fps gap (first-run warm-up or CPU-side alignment cost; not yet investigated); accel norm 3% under gravity (factory IMU calibration not yet applied); the 200 Hz / 10 min IMU drop test from the arrival plan.
+
