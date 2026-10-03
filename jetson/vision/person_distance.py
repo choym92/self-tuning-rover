@@ -15,7 +15,9 @@ Run (Jetson), mounting our RSUSB librealsense build and the USB devices into the
 """
 import argparse
 import math
+import threading
 import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import cv2
 import numpy as np
@@ -27,7 +29,39 @@ ap.add_argument("--seconds", type=float, default=20)
 ap.add_argument("--engine", default="yolo26n.engine")
 ap.add_argument("--conf", type=float, default=0.4)
 ap.add_argument("--out", default="person_distance.jpg")
+ap.add_argument("--stream-port", type=int, default=0,
+                help="if > 0, serve a live MJPEG view (color with boxes | depth) on this port")
 args = ap.parse_args()
+
+latest_jpeg = [None]
+if args.stream_port:
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def do_GET(self):
+            if self.path != "/stream":
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html")
+                self.end_headers()
+                self.wfile.write(b"<html><body style='margin:0;background:#111'>"
+                                 b"<img src='/stream' style='width:100%'></body></html>")
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
+            self.end_headers()
+            try:
+                while True:
+                    jpg = latest_jpeg[0]
+                    if jpg is not None:
+                        self.wfile.write(b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + jpg + b"\r\n")
+                    time.sleep(0.04)
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+
+    server = ThreadingHTTPServer(("0.0.0.0", args.stream_port), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    print(f"live view on port {args.stream_port}", flush=True)
 
 W, H, FPS = 848, 480, 30
 cfg = rs.config()
@@ -75,6 +109,20 @@ try:
             bearing = math.degrees(math.atan2(u - intr.ppx, intr.fx))
             people.append((dist, bearing, float(conf), (int(x1), int(y1), int(x2), int(y2))))
         e = time.perf_counter()
+
+        if args.stream_port:
+            view = img.copy()
+            for dist, bearing, conf, (x1, y1, x2, y2) in people:
+                cv2.rectangle(view, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                cv2.putText(view, f"{dist:.2f} m {bearing:+.0f} deg {conf:.2f}", (x1, max(y1 - 8, 15)),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+            dvis = cv2.applyColorMap(cv2.convertScaleAbs(np.clip(depth, 0, 4.0), alpha=255 / 4.0), cv2.COLORMAP_TURBO)
+            dvis[depth == 0] = 0
+            fps_now = frames / max(time.time() - t0, 1e-6)
+            cv2.putText(view, f"{fps_now:.1f} fps", (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+            ok, jpg = cv2.imencode(".jpg", np.hstack([view, dvis]), [cv2.IMWRITE_JPEG_QUALITY, 70])
+            if ok:
+                latest_jpeg[0] = jpg.tobytes()
 
         timing["wait"].append((b - a) * 1000)
         timing["align"].append((c - b) * 1000)
