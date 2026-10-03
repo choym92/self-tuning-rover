@@ -215,3 +215,11 @@ Models from OpenCV Zoo: `face_detection_yunet_2023mar.onnx` (MIT, 0.23 MB) and `
 - First live run (all classes, YOLO26s): owner box labelled "Paul (owner)" with score 0.57–0.64 at 0.76 m, +28°. A second low-confidence "person" (0.40–0.62) appeared at −40°, 0.72 m; not yet identified (likely a person shown on a screen or a reflection).
 - Not yet measured: recognition rate vs distance and camera height, false-owner rate with other people, frame-rate cost of face recognition.
 
+### Owner recognition, round 2: ArcFace R50 (2026-10-03)
+
+The SFace setup labelled Paul's brother as the owner (scores while both were in view 0.37–0.49 vs Paul alone 0.63–0.70; Paul reports they do not look alike). Changes:
+- Embedding model: InsightFace buffalo_l `w600k_r50.onnx` (ArcFace R50 on WebFace600K, 512-d, **non-commercial research licence**, kept on the Jetson only, not in the repository), run with onnxruntime 1.23 CUDA in the Ultralytics container; alignment from YuNet's five landmarks to the standard 112x112 ArcFace template. 20.6 ms per face on GPU vs SFace 24.3 ms on CPU.
+- Rule: only the best-scoring face in a frame can be the owner (previously any face above the threshold could take the label). All face scores are now logged every second.
+- Re-enrolled with a 3-second countdown and a per-shot pose direction: 40 shots, all kept (similarity to mean min 0.41, median 0.78). Paul noted the poses were not very varied; to be improved later.
+- First live seconds with ArcFace, Paul alone: 0.34 at the frame edge, 0.68 facing the camera; ArcFace threshold starts at 0.40 and must be calibrated with the brother/stranger test (pending).
+

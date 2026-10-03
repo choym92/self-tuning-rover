@@ -80,10 +80,13 @@ print(f"color intrinsics fx {intr.fx:.1f} cx {intr.ppx:.1f}; depth scale {scale}
 fid = None
 if args.owner:
     from face_owner import FaceID
-    fid = FaceID("models")
+    _m = str(np.load(args.owner)["model"]) if "model" in np.load(args.owner).files else "sface"
+    fid = FaceID("models", model=_m)
     fid.load_owner(args.owner)
+    print(f"face model {_m}, threshold {fid.threshold}", flush=True)
     print(f"owner: {fid.owner_name} ({len(fid.owner_samples)} samples)", flush=True)
 owner_box, owner_sim, owner_seen = None, 0.0, 0.0
+face_scores = []  # (x-centre px, similarity) of every face in the last face check, for the log
 
 model = YOLO(args.engine, task="detect")
 PERSON = [k for k, v in model.names.items() if v == "person"][0] if hasattr(model, "names") and model.names else 0
@@ -123,7 +126,11 @@ try:
             people.append((dist, bearing, float(conf), (int(x1), int(y1), int(x2), int(y2)), res.names[int(cls)]))
         # Owner: find faces, give the owner label to the person box that contains the owner's face.
         if fid is not None and frames % args.face_every == 0:
-            for f, sim, is_owner in fid.match(img):
+            matches = fid.match(img)
+            face_scores = [(int(f[0] + f[2] / 2), round(sim, 2)) for f, sim, _ in matches]
+            # Only one owner exists: consider only the best-scoring face, and only if it passes the threshold.
+            best_face = max(matches, key=lambda m: m[1], default=None)
+            for f, sim, is_owner in ([best_face] if best_face else []):
                 if not is_owner:
                     continue
                 fx, fy = f[0] + f[2] / 2, f[1] + f[3] / 2
@@ -167,7 +174,8 @@ try:
 
         if time.time() >= next_print:
             desc = ", ".join(f"{p[4]} {p[0]:.2f} m @ {p[1]:+.0f} deg ({p[2]:.2f})" for p in sorted(people, key=lambda q: q[0])) or "nothing"
-            print(f"t={time.time() - t0:5.1f}s  {len(people)} object(s): {desc}", flush=True)
+            extra = f"  faces(x px: score) {face_scores}" if fid is not None else ""
+            print(f"t={time.time() - t0:5.1f}s  {len(people)} object(s): {desc}{extra}", flush=True)
             next_print += 1
 
         if people and not saved and time.time() - t0 > 2:
