@@ -8,7 +8,7 @@ GPU memory seen by torch. Compare with Ultralytics' published Orin Nano Super fi
 
 Run (Jetson):
   docker run --rm --runtime nvidia --ipc host -v ~/yolo:/work -w /work \
-    ultralytics/ultralytics:latest-jetson-jetpack6 python3 yolo_bench.py
+    ultralytics/ultralytics:latest-jetson-jetpack6 python3 yolo_bench.py [yolo26n|yolo26s|...]
 """
 import os
 import time
@@ -16,8 +16,11 @@ import time
 import numpy as np
 from ultralytics import YOLO
 
-WEIGHTS = "yolo26n.pt"
-ENGINE = "yolo26n.engine"
+import sys
+
+NAME = sys.argv[1] if len(sys.argv) > 1 else "yolo26n"
+WEIGHTS = f"{NAME}.pt"
+ENGINE = f"{NAME}.engine"
 IMAGE = "https://ultralytics.com/images/bus.jpg"
 N = 200
 

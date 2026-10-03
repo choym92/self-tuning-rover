@@ -204,4 +204,5 @@ Container `ultralytics/ultralytics:latest-jetson-jetpack6` (15.2 GB on disk, Ten
 Live (clocks locked, 848x480 depth aligned to color, 30 fps requested, person class only, 20 s): **20.8 fps end-to-end**; per frame median: wait for frames 10.3 ms, depth-to-color alignment 9.6 ms (CPU), YOLO call incl. pre/post 12.6 ms, distance/bearing 0.9 ms. One seated person detected every second, conf 0.93, distance 0.62 m (median depth of the central 40% of the box), bearing +15° (from color intrinsics fx 428.3, cx 425.8). The person sat still, so the steady values are expected; distance not yet checked against ground truth. Next speed-ups if needed: skip full-frame alignment (project only the box centre), run capture and inference in separate threads.
 
 `jetson_clocks` is not persistent (reset at reboot); whether to lock clocks on the robot is open (heat, battery).
+| YOLO26s TensorRT FP16 (engine 22.2 MB, export 429 s), clocks locked | — | **6.2 ms (163 fps)**; PyTorch 27.3 ms; torch max GPU memory 160 MB. First live frames with all 80 classes: chair 0.37 m, person 0.59 m, laptop 0.71 m, bed 2.18 m |
 
