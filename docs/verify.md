@@ -224,3 +224,20 @@ The SFace setup labelled Paul's brother as the owner (scores while both were in 
 - First live seconds with ArcFace, Paul alone: 0.34 at the frame edge, 0.68 facing the camera; ArcFace threshold starts at 0.40 and must be calibrated with the brother/stranger test (pending).
 - **Brother test with ArcFace (same evening): PASS.** 23 seconds with two faces in view: higher score (Paul) median 0.74, min 0.45; lower score (brother) median 0.24, max 0.35. The 0.40 threshold sits in the gap; the brother was shown as "person" throughout (Paul's observation). With SFace the brother had scored 0.37–0.49 against a 0.363 threshold. Margin is ~0.10 at the extremes, so multi-frame voting is still worth adding before the robot acts on the label.
 
+### Face detector A/B: YuNet vs SCRFD det_10g, by measured distance (2026-10-03)
+
+`jetson/vision/face_det_compare.py`: both detectors on the same frames; distance measured with D436 depth at the face; a segment records only frames within ±0.2 m of the target (60 frames each); camera height ~desk level except the last segment (knee height). Owner (Paul) alone; ArcFace R50 score as above. YuNet on CPU via OpenCV, SCRFD on GPU via onnxruntime CUDA, both at the full 848x480 frame.
+
+| Target (measured median) | Detector | Found | Detector time | Face width | ArcFace score median / min |
+|---|---|---|---|---|---|
+| 1 m (1.14 m) | YuNet | 90% | 39.1 ms | 57 px | 0.77 / 0.61 |
+| | SCRFD | 90% | 31.1 ms | 57 px | 0.76 / 0.59 |
+| 2 m (2.17 m) | YuNet | 100% | 41.8 ms | 31 px | 0.65 / 0.58 |
+| | SCRFD | 100% | 31.2 ms | 31 px | 0.63 / 0.56 |
+| 3 m (2.98 m) | YuNet | 100% | 39.5 ms | 22 px | 0.55 / 0.44 |
+| | SCRFD | 100% | 31.2 ms | 23 px | 0.55 / 0.45 |
+| camera low, 1.5 m (1.40 m) | YuNet | 100% | 39.1 ms | 46 px | 0.72 / 0.58 |
+| | SCRFD | 100% | 31.3 ms | 48 px | 0.71 / 0.56 |
+
+Result: no accuracy difference in these conditions (single person facing the camera, indoor light); SCRFD is ~8 ms faster here only because it runs on the GPU. Keep YuNet (MIT) as the detector; SCRFD stays available. ArcFace recognised the owner above the 0.40 threshold at every distance up to 3 m (minimum 0.44 at 3 m with a 22 px face), better than expected; the margin narrows with distance. Not yet tested: side views, people other than the owner at 2–3 m, dim light.
+
