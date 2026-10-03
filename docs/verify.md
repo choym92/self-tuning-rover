@@ -222,4 +222,5 @@ The SFace setup labelled Paul's brother as the owner (scores while both were in 
 - Rule: only the best-scoring face in a frame can be the owner (previously any face above the threshold could take the label). All face scores are now logged every second.
 - Re-enrolled with a 3-second countdown and a per-shot pose direction: 40 shots, all kept (similarity to mean min 0.41, median 0.78). Paul noted the poses were not very varied; to be improved later.
 - First live seconds with ArcFace, Paul alone: 0.34 at the frame edge, 0.68 facing the camera; ArcFace threshold starts at 0.40 and must be calibrated with the brother/stranger test (pending).
+- **Brother test with ArcFace (same evening): PASS.** 23 seconds with two faces in view: higher score (Paul) median 0.74, min 0.45; lower score (brother) median 0.24, max 0.35. The 0.40 threshold sits in the gap; the brother was shown as "person" throughout (Paul's observation). With SFace the brother had scored 0.37–0.49 against a 0.363 threshold. Margin is ~0.10 at the extremes, so multi-frame voting is still worth adding before the robot acts on the label.
 
