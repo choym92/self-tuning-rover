@@ -232,3 +232,11 @@ Reading: all three are usable; none is clearly dominant. Qwen3.5 4B has the best
 
 Compared on the Jetson with clocks locked (`docs/verify.md`): YOLO26n 3.6 ms / ~80 MB GPU, YOLO26s 6.2 ms / ~160 MB GPU; both far faster than the 30 fps camera. YOLO26s detected more of the room in live use (chair, person, laptop and bed in the first frames) and has the higher published COCO accuracy (48.6 vs 40.9 mAP50-95). Neither reliably recognized a mouse held in a hand; accepted, since the robot's priority is people and large objects. YOLO26m (published 53.1 mAP) is measured only if YOLO26s misses things that matter. Licence: Ultralytics AGPL-3.0, acceptable for this public personal repository; RF-DETR (Apache-2.0) remains the alternative if that changes.
 
+## Owner recognition: SCRFD + ArcFace R50 with a guided gallery (2026-10-03, DECIDED by Paul)
+
+- Face detector **SCRFD det_10g** (GPU), embedding **ArcFace R50 `w600k_r50`**, gallery from the guided enrollment (`face_enroll_guided.py`, distances 1–3 m and low camera positions), cosine threshold 0.40, only the best-scoring face can be the owner.
+- Why: with SFace the brother was labelled as the owner; ArcFace separated them (0.74 vs 0.24 median). In the fair per-gallery distance test SCRFD matched YuNet's detection rate and gave equal or higher, more stable scores on small faces (3 m minimum 0.47 vs 0.18). Evidence in `docs/verify.md`.
+- Removed: SFace (model, code path, old galleries) and the old countdown enrollment. Kept: YuNet as a licence-free fallback detector (used by the comparison script).
+- Licence: SCRFD and ArcFace weights are InsightFace non-commercial research only. Fine for this personal project; the weights stay on the Jetson and are not committed. A commercial robot would need different models.
+- Next: re-enroll from the robot's real camera height (~30 cm on the UGV pan-tilt) once the kit arrives; add multi-frame voting before the robot acts on the label.
+

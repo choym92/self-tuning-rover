@@ -30,7 +30,8 @@ ap.add_argument("--engine", default="yolo26n.engine")
 ap.add_argument("--conf", type=float, default=0.4)
 ap.add_argument("--out", default="person_distance.jpg")
 ap.add_argument("--all-classes", action="store_true", help="detect all 80 COCO classes, not only person")
-ap.add_argument("--owner", default="", help="owner embeddings (face_owner.py enroll) to label the owner's box")
+ap.add_argument("--owner", default="", help="owner file from face_enroll_guided.py, e.g. owner/paul_guided.npz")
+ap.add_argument("--face-detector", choices=["scrfd", "yunet"], default="scrfd")
 ap.add_argument("--face-every", type=int, default=3, help="run face recognition every N frames")
 ap.add_argument("--stream-port", type=int, default=0,
                 help="if > 0, serve a live MJPEG view (color with boxes | depth) on this port")
@@ -80,10 +81,9 @@ print(f"color intrinsics fx {intr.fx:.1f} cx {intr.ppx:.1f}; depth scale {scale}
 fid = None
 if args.owner:
     from face_owner import FaceID
-    _m = str(np.load(args.owner)["model"]) if "model" in np.load(args.owner).files else "sface"
-    fid = FaceID("models", model=_m)
+    fid = FaceID("models", detector=args.face_detector)
     fid.load_owner(args.owner)
-    print(f"face model {_m}, threshold {fid.threshold}", flush=True)
+    print(f"face detector {args.face_detector}, ArcFace threshold {fid.threshold}", flush=True)
     print(f"owner: {fid.owner_name} ({len(fid.owner_samples)} samples)", flush=True)
 owner_box, owner_sim, owner_seen = None, 0.0, 0.0
 face_scores = []  # (x-centre px, similarity) of every face in the last face check, for the log

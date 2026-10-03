@@ -83,10 +83,10 @@ ap.add_argument("--owner", default="owner/paul_guided.npz")
 ap.add_argument("--stream-port", type=int, default=8090)
 args = ap.parse_args()
 
-fid = FaceID("models", model="arcface", detector="yunet")
+fid = FaceID("models", detector="yunet")
 fid.load_owner(args.owner)
 # SCRFD faces are scored against the SCRFD-aligned gallery when the owner file has one (guided enrollment)
-fid_s = FaceID("models", model="arcface", detector="scrfd", share_from=fid)
+fid_s = FaceID("models", detector="scrfd", share_from=fid)
 fid_s.load_owner(args.owner)
 scrfd = fid_s.scrfd
 

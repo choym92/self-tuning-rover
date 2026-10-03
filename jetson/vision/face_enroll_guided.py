@@ -46,8 +46,8 @@ ap.add_argument("--out", default="owner/paul_guided.npz")
 ap.add_argument("--stream-port", type=int, default=8090)
 args = ap.parse_args()
 
-fid_y = FaceID("models", model="arcface", detector="yunet")
-fid_s = FaceID("models", model="arcface", detector="scrfd", share_from=fid_y)
+fid_y = FaceID("models", detector="yunet")
+fid_s = FaceID("models", detector="scrfd", share_from=fid_y)
 
 latest = [None]
 
