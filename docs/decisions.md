@@ -227,3 +227,8 @@ Reading: all three are usable; none is clearly dominant. Qwen3.5 4B has the best
   read-only checks and tests may be completed coherently without repeated stops.
 - In concurrent agent work, the coordinating agent alone integrates, commits
   and pushes. This avoids shared-checkout conflicts and partial handoffs.
+
+## Person/object detector: YOLO26s, TensorRT FP16 (2026-10-03, DECIDED by Paul)
+
+Compared on the Jetson with clocks locked (`docs/verify.md`): YOLO26n 3.6 ms / ~80 MB GPU, YOLO26s 6.2 ms / ~160 MB GPU; both far faster than the 30 fps camera. YOLO26s detected more of the room in live use (chair, person, laptop and bed in the first frames) and has the higher published COCO accuracy (48.6 vs 40.9 mAP50-95). Neither reliably recognized a mouse held in a hand; accepted, since the robot's priority is people and large objects. YOLO26m (published 53.1 mAP) is measured only if YOLO26s misses things that matter. Licence: Ultralytics AGPL-3.0, acceptable for this public personal repository; RF-DETR (Apache-2.0) remains the alternative if that changes.
+
