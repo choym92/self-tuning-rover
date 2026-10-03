@@ -178,3 +178,16 @@ Speed (`llama-bench -ngl 99 -p 512 -n 128`, same for all): Nemotron 3 Nano 4B pp
 
 Open: the 24 fps vs 30 fps gap (first-run warm-up or CPU-side alignment cost; not yet investigated); accel norm 3% under gravity (factory IMU calibration not yet applied); the 200 Hz / 10 min IMU drop test from the arrival plan.
 
+### D436 IMU soak test, 10 minutes with depth + color running (2026-10-03, Jetson, RSUSB 2.58.4)
+
+`jetson/camera/imu_soak.py --seconds 600`: gyro 200 Hz + accel 100 Hz on the motion sensor, depth + color 848x480 at 30 fps through a pipeline at the same time, camera at rest on the desk, USB 3. Gap analysis excludes the first second (start-up) and counts clock jumps separately.
+
+| Stream | Samples / frames | Mean rate | Per-second range | Missing | Worst gap |
+|---|---|---|---|---|---|
+| Gyro | 120,497 | 200.1 Hz | 199–201 | 7 samples (0.006%) in 3 gaps | 19.1 ms |
+| Accel | 60,360 | 100.2 Hz | 99–101 | 0 | 20.0 ms |
+| Depth | 17,975 | 29.8 fps | — | 0 frames (frame counter) | — |
+| Color | 17,975 | 29.8 fps | — | 0 frames | — |
+
+**PASS.** The RSUSB route (Route A in decisions.md) delivers a stable IMU together with video on this kernel; Route B (HID kernel modules) is not needed. The 24 fps seen in the first 5-second check was start-up plus the CPU-side depth-to-color alignment in that script; without alignment the pipeline holds 29.8 fps. Per-second counts: `~/camera/imu_soak_600s.csv` on the Jetson.
+
