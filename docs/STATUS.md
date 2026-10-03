@@ -68,6 +68,8 @@ Next steps:
   Jetson over USB 3 on 2026-10-03 (`docs/verify.md`). 10-minute IMU soak with video
   passed (0.006% gyro samples missing, 0 video drops). Still to do: depth accuracy
   against a tape measure. The Mac is not a usable live host.
+- Person detection + distance: YOLO26n TensorRT FP16 + D436 runs live at ~21 fps
+  end-to-end in the Ultralytics container (2026-10-03, `docs/verify.md`).
 - Waveshare UGV Rover PT Acce: selected but repository status says not ordered.
   Never promote the hypothetical assembled-rover discussion to a purchase fact.
 - Final microphone: not purchased. Test the Waveshare audio board first; the

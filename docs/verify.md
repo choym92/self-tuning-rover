@@ -191,3 +191,17 @@ Open: the 24 fps vs 30 fps gap (first-run warm-up or CPU-side alignment cost; no
 
 **PASS.** The RSUSB route (Route A in decisions.md) delivers a stable IMU together with video on this kernel; Route B (HID kernel modules) is not needed. The 24 fps seen in the first 5-second check was start-up plus the CPU-side depth-to-color alignment in that script; without alignment the pipeline holds 29.8 fps. Per-second counts: `~/camera/imu_soak_600s.csv` on the Jetson.
 
+## Person detection with distance: YOLO26n + D436 (2026-10-03, Jetson)
+
+Container `ultralytics/ultralytics:latest-jetson-jetpack6` (15.2 GB on disk, TensorRT 10.7), our RSUSB librealsense mounted read-only (`-v ~/src/librealsense/build/Release:/rs -e PYTHONPATH=/rs -e LD_LIBRARY_PATH=/rs -v /dev/bus/usb:/dev/bus/usb --device-cgroup-rule='c 189:* rmw'`). Scripts: `jetson/vision/yolo_bench.py`, `jetson/vision/person_distance.py`.
+
+| Measurement | Default clocks (DVFS, GPU idles at 306 MHz) | After `sudo jetson_clocks` (GPU locked 1020 MHz) |
+|---|---|---|
+| YOLO26n PyTorch, bus.jpg, model forward | 28.0 ms (36 fps) | 26.1 ms |
+| YOLO26n TensorRT FP16 (engine 8.3 MB, export 491 s) | 10.8 ms (93 fps) | **3.6 ms (278 fps)**; Ultralytics' published Orin Nano Super figure is 4.57 ms |
+| GPU memory (torch max allocated) | 82 MB | — |
+
+Live (clocks locked, 848x480 depth aligned to color, 30 fps requested, person class only, 20 s): **20.8 fps end-to-end**; per frame median: wait for frames 10.3 ms, depth-to-color alignment 9.6 ms (CPU), YOLO call incl. pre/post 12.6 ms, distance/bearing 0.9 ms. One seated person detected every second, conf 0.93, distance 0.62 m (median depth of the central 40% of the box), bearing +15° (from color intrinsics fx 428.3, cx 425.8). The person sat still, so the steady values are expected; distance not yet checked against ground truth. Next speed-ups if needed: skip full-frame alignment (project only the box centre), run capture and inference in separate threads.
+
+`jetson_clocks` is not persistent (reset at reboot); whether to lock clocks on the robot is open (heat, battery).
+
