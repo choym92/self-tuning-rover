@@ -30,6 +30,8 @@ ap.add_argument("--engine", default="yolo26n.engine")
 ap.add_argument("--conf", type=float, default=0.4)
 ap.add_argument("--out", default="person_distance.jpg")
 ap.add_argument("--all-classes", action="store_true", help="detect all 80 COCO classes, not only person")
+ap.add_argument("--owner", default="", help="owner embeddings (face_owner.py enroll) to label the owner's box")
+ap.add_argument("--face-every", type=int, default=3, help="run face recognition every N frames")
 ap.add_argument("--stream-port", type=int, default=0,
                 help="if > 0, serve a live MJPEG view (color with boxes | depth) on this port")
 args = ap.parse_args()
@@ -75,6 +77,14 @@ intr = prof.get_stream(rs.stream.color).as_video_stream_profile().get_intrinsics
 align = rs.align(rs.stream.color)
 print(f"color intrinsics fx {intr.fx:.1f} cx {intr.ppx:.1f}; depth scale {scale}")
 
+fid = None
+if args.owner:
+    from face_owner import FaceID
+    fid = FaceID("models")
+    fid.load_owner(args.owner)
+    print(f"owner: {fid.owner_name} ({len(fid.owner_samples)} samples)", flush=True)
+owner_box, owner_sim, owner_seen = None, 0.0, 0.0
+
 model = YOLO(args.engine, task="detect")
 PERSON = [k for k, v in model.names.items() if v == "person"][0] if hasattr(model, "names") and model.names else 0
 
@@ -111,14 +121,36 @@ try:
             u = (x1 + x2) / 2
             bearing = math.degrees(math.atan2(u - intr.ppx, intr.fx))
             people.append((dist, bearing, float(conf), (int(x1), int(y1), int(x2), int(y2)), res.names[int(cls)]))
+        # Owner: find faces, give the owner label to the person box that contains the owner's face.
+        if fid is not None and frames % args.face_every == 0:
+            for f, sim, is_owner in fid.match(img):
+                if not is_owner:
+                    continue
+                fx, fy = f[0] + f[2] / 2, f[1] + f[3] / 2
+                for p in people:
+                    x1, y1, x2, y2 = p[3]
+                    if p[4] == "person" and x1 <= fx <= x2 and y1 <= fy <= y2:
+                        owner_box, owner_sim, owner_seen = p[3], sim, time.time()
+        if owner_box is not None and time.time() - owner_seen < 1.5:
+            # keep the label on the person box that overlaps the last owner box most (simple persistence)
+            def iou(a, b):
+                ix = max(0, min(a[2], b[2]) - max(a[0], b[0])); iy = max(0, min(a[3], b[3]) - max(a[1], b[1]))
+                inter = ix * iy
+                return inter / ((a[2] - a[0]) * (a[3] - a[1]) + (b[2] - b[0]) * (b[3] - b[1]) - inter + 1e-9)
+            best = max((p for p in people if p[4] == "person"), key=lambda p: iou(p[3], owner_box), default=None)
+            if best is not None and iou(best[3], owner_box) > 0.3:
+                i = people.index(best)
+                people[i] = best[:4] + (f"{fid.owner_name} (owner) {owner_sim:.2f}",)
+                owner_box = best[3]
         e = time.perf_counter()
 
         if args.stream_port:
             view = img.copy()
             for dist, bearing, conf, (x1, y1, x2, y2), name in people:
-                cv2.rectangle(view, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                color = (0, 215, 255) if "(owner)" in name else (0, 255, 0)
+                cv2.rectangle(view, (x1, y1), (x2, y2), color, 3 if "(owner)" in name else 2)
                 cv2.putText(view, f"{name} {conf:.0%} {dist:.2f} m {bearing:+.0f} deg", (x1, max(y1 - 8, 15)),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
             dvis = cv2.applyColorMap(cv2.convertScaleAbs(np.clip(depth, 0, 4.0), alpha=255 / 4.0), cv2.COLORMAP_TURBO)
             dvis[depth == 0] = 0
             fps_now = frames / max(time.time() - t0, 1e-6)

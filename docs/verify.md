@@ -206,3 +206,12 @@ Live (clocks locked, 848x480 depth aligned to color, 30 fps requested, person cl
 `jetson_clocks` is not persistent (reset at reboot); whether to lock clocks on the robot is open (heat, battery).
 | YOLO26s TensorRT FP16 (engine 22.2 MB, export 429 s), clocks locked | — | **6.2 ms (163 fps)**; PyTorch 27.3 ms; torch max GPU memory 160 MB. First live frames with all 80 classes: chair 0.37 m, person 0.59 m, laptop 0.71 m, bed 2.18 m |
 
+## Owner face recognition: YuNet + SFace on top of YOLO26s (2026-10-03, Jetson)
+
+Models from OpenCV Zoo: `face_detection_yunet_2023mar.onnx` (MIT, 0.23 MB) and `face_recognition_sface_2021dec.onnx` (Apache-2.0, 38.7 MB), run on the CPU through OpenCV 4.11 in the Ultralytics container. Script `jetson/vision/face_owner.py`; owner labelling via `person_distance.py --owner owner/paul.npz`. Only embeddings are stored (`~/yolo/owner/paul.npz` on the Jetson, not in the repository); no face images are saved.
+
+- Enrollment: 30 samples in four guided phases (close, up/down, 1.5–2 m, camera at knee height), face widths 97–187 px. Similarity of each sample to the mean: median 0.80; four samples (three from the 1.5–2 m phase, one from the low-camera phase) were below 0.4 and were dropped, leaving 26 (median 0.84).
+- Matching: score = max(cosine to the mean, mean of the 3 closest samples); owner if ≥ 0.363 (OpenCV's published SFace threshold). Face recognition runs every 3rd frame; the owner label is carried on the overlapping person box for 1.5 s.
+- First live run (all classes, YOLO26s): owner box labelled "Paul (owner)" with score 0.57–0.64 at 0.76 m, +28°. A second low-confidence "person" (0.40–0.62) appeared at −40°, 0.72 m; not yet identified (likely a person shown on a screen or a reflection).
+- Not yet measured: recognition rate vs distance and camera height, false-owner rate with other people, frame-rate cost of face recognition.
+
