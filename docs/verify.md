@@ -241,3 +241,20 @@ The SFace setup labelled Paul's brother as the owner (scores while both were in 
 
 Result: no accuracy difference in these conditions (single person facing the camera, indoor light); SCRFD is ~8 ms faster here only because it runs on the GPU. Keep YuNet (MIT) as the detector; SCRFD stays available. ArcFace recognised the owner above the 0.40 threshold at every distance up to 3 m (minimum 0.44 at 3 m with a 22 px face), better than expected; the margin narrows with distance. Not yet tested: side views, people other than the owner at 2–3 m, dim light.
 
+### Face detector A/B, fair version: each detector scored against its own gallery (2026-10-03)
+
+Guided enrollment (`jetson/vision/face_enroll_guided.py`): 28 planned shots by measured distance and camera height (desk 1/2/3 m, knee 1.5 m, floor 1.5/2.5 m; straight, ±30°, side profiles, up/down). 22 captured; the floor-2.5 m segment and the first shot of the knee and floor-1.5 m segments were skipped (distance not reached in 25 s). YuNet and SCRFD found the face on exactly the same 22 shots, including all four side profiles. One ArcFace embedding per detector per shot is stored (`samples_yunet`, `samples_scrfd` in `~/yolo/owner/paul_guided.npz`, Jetson only).
+
+| Target (measured) | Detector | Found | Time | Face | Score median / min |
+|---|---|---|---|---|---|
+| 1 m (0.89) | YuNet | 97% | 38.5 ms | 72 px | 0.70 / 0.56 |
+| | SCRFD | 97% | 31.1 ms | 72 px | 0.73 / 0.55 |
+| 2 m (2.14) | YuNet | 100% | 37.9 ms | 32 px | 0.73 / 0.68 |
+| | SCRFD | 100% | 31.1 ms | 32 px | 0.73 / 0.69 |
+| 3 m (2.88) | YuNet | 100% | 37.8 ms | 22 px | 0.60 / **0.18** |
+| | SCRFD | 100% | 31.2 ms | 22 px | 0.62 / 0.47 |
+| low 1.5 m (1.42) | YuNet | 100% | 39.8 ms | 44 px | 0.69 / 0.62 |
+| | SCRFD | 100% | 31.2 ms | 46 px | 0.71 / 0.66 |
+
+Findings: detection rates are identical; with matched galleries SCRFD scores equal or 0.01–0.03 higher and is more stable on small faces (3 m minimum 0.47 vs 0.18 for YuNet, i.e. at least one YuNet frame with poor landmarks would have dropped below the 0.40 threshold). The guided gallery also raised far-distance scores versus the earlier close-up gallery (2 m median 0.65 → 0.73, 3 m 0.55 → 0.60–0.62). One session per detector, 60 frames per segment, owner only. Licence note: SCRFD (det_10g) is non-commercial research like ArcFace R50, so using it does not change the licence status of the pipeline that already depends on ArcFace.
+
