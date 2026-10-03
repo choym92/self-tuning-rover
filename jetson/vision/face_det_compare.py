@@ -79,13 +79,16 @@ class SCRFD:
 
 
 ap = argparse.ArgumentParser()
-ap.add_argument("--owner", default="owner/paul_arcface.npz")
+ap.add_argument("--owner", default="owner/paul_guided.npz")
 ap.add_argument("--stream-port", type=int, default=8090)
 args = ap.parse_args()
 
-fid = FaceID("models", model="arcface")
+fid = FaceID("models", model="arcface", detector="yunet")
 fid.load_owner(args.owner)
-scrfd = SCRFD("models/det_10g.onnx")
+# SCRFD faces are scored against the SCRFD-aligned gallery when the owner file has one (guided enrollment)
+fid_s = FaceID("models", model="arcface", detector="scrfd", share_from=fid)
+fid_s.load_owner(args.owner)
+scrfd = fid_s.scrfd
 
 latest = [None]
 
@@ -163,7 +166,8 @@ try:
             in_band = dist is not None and abs(dist - target) <= BAND
             for name, color in (("yunet", (0, 255, 0)), ("scrfd", (255, 128, 0))):
                 f, ms = row[name]
-                score = fid.similarity(fid.embed(img, f)) if f is not None else None
+                scorer = fid if name == "yunet" else fid_s
+                score = scorer.similarity(scorer.embed(img, f)) if f is not None else None
                 if in_band:
                     rec[name].append((f is not None, ms, int(f[2]) if f is not None else 0, score))
                 if f is not None:

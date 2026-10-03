@@ -30,11 +30,71 @@ ARC_TEMPLATE = np.array([[38.2946, 51.6963], [73.5318, 51.5014], [56.0252, 71.73
                          [41.5493, 92.3655], [70.7299, 92.2041]], dtype=np.float32)
 
 
+SCRFD_FILE = "det_10g.onnx"  # InsightFace buffalo_l face detector, non-commercial research only
+
+
+class SCRFD:
+    """Minimal SCRFD decoder for det_10g.onnx (3 strides, 2 anchors per location, 5 landmarks).
+    Returns rows in YuNet's layout: x, y, w, h, 5 landmarks (x, y), score."""
+
+    def __init__(self, path, size=640, score=0.5, nms=0.4):
+        import onnxruntime as ort
+        self.sess = ort.InferenceSession(path, providers=["CUDAExecutionProvider", "CPUExecutionProvider"])
+        self.inp = self.sess.get_inputs()[0].name
+        self.size, self.score, self.nms = size, score, nms
+        self.strides, self.na = (8, 16, 32), 2
+        self.centers = {}
+
+    def _centers(self, h, w, s):
+        key = (h, w, s)
+        if key not in self.centers:
+            yy, xx = np.mgrid[:h, :w]
+            c = (np.stack([xx, yy], -1).reshape(-1, 2) * s).astype(np.float32)
+            self.centers[key] = np.repeat(c, self.na, axis=0)
+        return self.centers[key]
+
+    def detect(self, img):
+        H, W = img.shape[:2]
+        scale = self.size / max(H, W)
+        nh, nw = int(H * scale), int(W * scale)
+        canvas = np.zeros((self.size, self.size, 3), np.uint8)
+        canvas[:nh, :nw] = cv2.resize(img, (nw, nh))
+        blob = cv2.dnn.blobFromImage(canvas, 1.0 / 128, (self.size, self.size), (127.5, 127.5, 127.5), swapRB=True)
+        outs = self.sess.run(None, {self.inp: blob})
+        boxes, scores, kpss = [], [], []
+        for i, s in enumerate(self.strides):
+            sc, bb, kp = outs[i].reshape(-1), outs[i + 3].reshape(-1, 4) * s, outs[i + 6].reshape(-1, 10) * s
+            c = self._centers(self.size // s, self.size // s, s)
+            keep = np.where(sc >= self.score)[0]
+            if not len(keep):
+                continue
+            boxes.append(np.hstack([c[keep] - bb[keep, :2], c[keep] + bb[keep, 2:]]))
+            scores.append(sc[keep])
+            kpss.append(c[keep][:, None, :] + kp[keep].reshape(-1, 5, 2))
+        if not boxes:
+            return []
+        boxes, scores, kpss = np.vstack(boxes) / scale, np.hstack(scores), np.vstack(kpss) / scale
+        xywh = [[float(x1), float(y1), float(x2 - x1), float(y2 - y1)] for x1, y1, x2, y2 in boxes]
+        idx = cv2.dnn.NMSBoxes(xywh, scores.tolist(), self.score, self.nms)
+        return [np.array([*xywh[i], *kpss[i].reshape(-1), scores[i]], np.float32) for i in np.array(idx).flatten()]
+
+
 class FaceID:
-    def __init__(self, model_dir="models", score=0.7, model="sface"):
+    def __init__(self, model_dir="models", score=0.7, model="sface", detector="yunet", share_from=None):
+        """detector: "yunet" (OpenCV Zoo, MIT, CPU) or "scrfd" (InsightFace, GPU).
+        share_from: another FaceID whose recognition model session to reuse (saves GPU memory)."""
         self.model = model
+        self.detector = detector
         self.threshold = THRESHOLD[model]
-        self.det = cv2.FaceDetectorYN.create(os.path.join(model_dir, YUNET), "", (320, 320), score, 0.3, 5000)
+        if detector == "scrfd":
+            self.scrfd = SCRFD(os.path.join(model_dir, SCRFD_FILE), score=0.5)
+        else:
+            self.det = cv2.FaceDetectorYN.create(os.path.join(model_dir, YUNET), "", (320, 320), score, 0.3, 5000)
+        if share_from is not None:
+            self.rec = getattr(share_from, "rec", None)
+            self.sess, self.inp = getattr(share_from, "sess", None), getattr(share_from, "inp", None)
+            self.owner_name, self.owner = None, None
+            return
         if model == "sface":
             self.rec = cv2.FaceRecognizerSF.create(os.path.join(model_dir, SFACE), "")
         else:
@@ -46,6 +106,8 @@ class FaceID:
         self.owner = None  # unit-norm mean embedding
 
     def faces(self, img):
+        if self.detector == "scrfd":
+            return self.scrfd.detect(img)
         h, w = img.shape[:2]
         self.det.setInputSize((w, h))
         _, faces = self.det.detect(img)
@@ -70,9 +132,11 @@ class FaceID:
         saved_model = str(d["model"]) if "model" in d.files else "sface"
         assert saved_model == self.model, f"{path} was enrolled with {saved_model}, not {self.model}"
         self.owner_name = str(d["name"])
-        self.owner = d["mean"].astype(np.float32)
-        S = d["samples"].astype(np.float32)
-        self.owner_samples = S[(S @ self.owner) >= 0.4]
+        key = f"samples_{self.detector}"  # guided enrollment stores one gallery per face detector
+        S = (d[key] if key in d.files else d["samples"]).astype(np.float32)
+        mean = S.mean(0)
+        self.owner = mean / np.linalg.norm(mean)
+        self.owner_samples = S
 
     def similarity(self, e):
         """Score = max(similarity to the mean, mean of the 3 closest enrolled samples).
