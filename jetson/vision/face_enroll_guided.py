@@ -36,6 +36,11 @@ SEGMENTS = [
     ("E", "camera on the FLOOR, tilted up", 1.5, [LOOK_DOWN, LEFT, RIGHT, STRAIGHT]),
     ("F", "camera on the FLOOR, tilted up", 2.5, [LOOK_DOWN, LEFT, RIGHT, STRAIGHT]),
 ]
+# Close-range plan, appended to an existing gallery with --plan close --append.
+CLOSE_SEGMENTS = [
+    ("G", "camera on the DESK", 0.5, [STRAIGHT, LEFT, RIGHT, UP, DOWN, PROF_L, PROF_R]),
+    ("H", "camera on the DESK", 0.8, [STRAIGHT, LEFT, RIGHT, UP, DOWN]),
+]
 BAND = 0.25
 COUNTDOWN = 3.0
 SHOT_TIMEOUT = 25.0  # seconds per shot before it is skipped (e.g. no face found at a profile)
@@ -44,7 +49,12 @@ ap = argparse.ArgumentParser()
 ap.add_argument("--name", default="Paul")
 ap.add_argument("--out", default="owner/paul_guided.npz")
 ap.add_argument("--stream-port", type=int, default=8090)
+ap.add_argument("--plan", choices=["full", "close"], default="full")
+ap.add_argument("--append", action="store_true", help="add the new shots to the existing gallery in --out")
 args = ap.parse_args()
+if args.plan == "close":
+    SEGMENTS = CLOSE_SEGMENTS
+    BAND = 0.15
 
 fid_y = FaceID("models", detector="yunet")
 fid_s = FaceID("models", detector="scrfd", share_from=fid_y)
@@ -193,9 +203,21 @@ if not emb["yunet"] and not emb["scrfd"]:
     raise SystemExit("nothing captured; not saved")
 save = {"name": args.name, "model": "arcface", "created": time.strftime("%Y-%m-%d %H:%M"),
         "meta_json": json.dumps(meta)}
+old_counts = {}
+if args.append:
+    prev = np.load(args.out)
+    save["meta_json"] = json.dumps(json.loads(str(prev["meta_json"])) + meta)
+    save["created"] = str(prev["created"]) + " + " + save["created"]
+    for name in ("yunet", "scrfd"):
+        key = f"samples_{name}"
+        if key in prev.files:
+            old_counts[name] = len(prev[key])
+            emb[name] = list(prev[key]) + emb[name]
 for name in ("yunet", "scrfd"):
     if emb[name]:
         save[f"samples_{name}"] = np.stack(emb[name])
+if old_counts:
+    print(f"appended to {args.out}: previous {old_counts}")
 np.savez(args.out, **save)
 print(f"\nsaved {args.out}: yunet {len(emb['yunet'])} embeddings, scrfd {len(emb['scrfd'])} embeddings")
 print("per segment (found by yunet / scrfd out of shots):")

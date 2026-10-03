@@ -258,3 +258,9 @@ Guided enrollment (`jetson/vision/face_enroll_guided.py`): 28 planned shots by m
 
 Findings: detection rates are identical; with matched galleries SCRFD scores equal or 0.01–0.03 higher and is more stable on small faces (3 m minimum 0.47 vs 0.18 for YuNet, i.e. at least one YuNet frame with poor landmarks would have dropped below the 0.40 threshold). The guided gallery also raised far-distance scores versus the earlier close-up gallery (2 m median 0.65 → 0.73, 3 m 0.55 → 0.60–0.62). One session per detector, 60 frames per segment, owner only. Licence note: SCRFD (det_10g) is non-commercial research like ArcFace R50, so using it does not change the licence status of the pipeline that already depends on ArcFace.
 
+### Owner recognition with the default setup, brother test and close-range enrollment (2026-10-03)
+
+- Live view with SCRFD + ArcFace + guided gallery (22 shots): brother in view for 9 s → owner median 0.62 (min **0.38**, once below the 0.40 threshold), brother median 0.17 (max 0.24).
+- Added 12 close shots with `face_enroll_guided.py --plan close --append` (0.41–0.75 m measured; straight, ±30°, up, down, both profiles; all 12 found by both detectors). Gallery now 34 embeddings per detector; previous gallery kept as `paul_guided.before-close.npz` on the Jetson.
+- Owner alone at ~0.8 m right afterwards (20 s): score min 0.85, median 0.86, max 0.88 (before: 0.62–0.67 at similar distance). Not yet re-checked: the brother's score with the larger gallery, and recognition on another day (lighting, clothes, glasses).
+
