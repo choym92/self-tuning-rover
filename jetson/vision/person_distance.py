@@ -29,6 +29,7 @@ ap.add_argument("--seconds", type=float, default=20)
 ap.add_argument("--engine", default="yolo26n.engine")
 ap.add_argument("--conf", type=float, default=0.4)
 ap.add_argument("--out", default="person_distance.jpg")
+ap.add_argument("--all-classes", action="store_true", help="detect all 80 COCO classes, not only person")
 ap.add_argument("--stream-port", type=int, default=0,
                 help="if > 0, serve a live MJPEG view (color with boxes | depth) on this port")
 args = ap.parse_args()
@@ -94,11 +95,13 @@ try:
         depth = np.asanyarray(d_frame.get_data()).astype(np.float32) * scale
         img = np.asanyarray(c_frame.get_data())
         c = time.perf_counter()
-        res = model(img, imgsz=640, conf=args.conf, classes=[PERSON], device=0, verbose=False)[0]
+        res = model(img, imgsz=640, conf=args.conf, classes=None if args.all_classes else [PERSON],
+                    device=0, verbose=False)[0]
         d = time.perf_counter()
 
         people = []
-        for (x1, y1, x2, y2), conf in zip(res.boxes.xyxy.cpu().numpy(), res.boxes.conf.cpu().numpy()):
+        for (x1, y1, x2, y2), conf, cls in zip(res.boxes.xyxy.cpu().numpy(), res.boxes.conf.cpu().numpy(),
+                                               res.boxes.cls.cpu().numpy()):
             w, h = x2 - x1, y2 - y1
             cx1, cx2 = int(x1 + 0.3 * w), int(x2 - 0.3 * w)
             cy1, cy2 = int(y1 + 0.3 * h), int(y2 - 0.3 * h)
@@ -107,14 +110,14 @@ try:
             dist = float(np.median(valid)) if valid.size > 20 else float("nan")
             u = (x1 + x2) / 2
             bearing = math.degrees(math.atan2(u - intr.ppx, intr.fx))
-            people.append((dist, bearing, float(conf), (int(x1), int(y1), int(x2), int(y2))))
+            people.append((dist, bearing, float(conf), (int(x1), int(y1), int(x2), int(y2)), res.names[int(cls)]))
         e = time.perf_counter()
 
         if args.stream_port:
             view = img.copy()
-            for dist, bearing, conf, (x1, y1, x2, y2) in people:
+            for dist, bearing, conf, (x1, y1, x2, y2), name in people:
                 cv2.rectangle(view, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                cv2.putText(view, f"{dist:.2f} m {bearing:+.0f} deg {conf:.2f}", (x1, max(y1 - 8, 15)),
+                cv2.putText(view, f"{name} {conf:.0%} {dist:.2f} m {bearing:+.0f} deg", (x1, max(y1 - 8, 15)),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
             dvis = cv2.applyColorMap(cv2.convertScaleAbs(np.clip(depth, 0, 4.0), alpha=255 / 4.0), cv2.COLORMAP_TURBO)
             dvis[depth == 0] = 0
@@ -131,12 +134,12 @@ try:
         frames += 1
 
         if time.time() >= next_print:
-            desc = ", ".join(f"{p[0]:.2f} m @ {p[1]:+.0f} deg ({p[2]:.2f})" for p in sorted(people)) or "no person"
-            print(f"t={time.time() - t0:5.1f}s  {len(people)} person(s): {desc}", flush=True)
+            desc = ", ".join(f"{p[4]} {p[0]:.2f} m @ {p[1]:+.0f} deg ({p[2]:.2f})" for p in sorted(people, key=lambda q: q[0])) or "nothing"
+            print(f"t={time.time() - t0:5.1f}s  {len(people)} object(s): {desc}", flush=True)
             next_print += 1
 
         if people and not saved and time.time() - t0 > 2:
-            for dist, bearing, conf, (x1, y1, x2, y2) in people:
+            for dist, bearing, conf, (x1, y1, x2, y2), name in people:
                 cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
                 cv2.putText(img, f"{dist:.2f} m {bearing:+.0f} deg", (x1, max(y1 - 8, 15)),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
