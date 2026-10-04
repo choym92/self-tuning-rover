@@ -55,6 +55,7 @@ args = ap.parse_args()
 if args.plan == "close":
     SEGMENTS = CLOSE_SEGMENTS
     BAND = 0.15
+prev = np.load(args.out) if args.append else None  # fail now, not after the session, if the file is missing
 
 fid_y = FaceID("models", detector="yunet")
 fid_s = FaceID("models", detector="scrfd", share_from=fid_y)
@@ -151,7 +152,8 @@ try:
                 img, depth = grab()
                 fy, fs = largest(fid_y.faces(img)), largest(fid_s.faces(img))
                 dist = distance_at(depth, fs if fs is not None else fy)
-                in_band = dist is not None and abs(dist - target) <= BAND
+                face_found = fy is not None or fs is not None
+                in_band = face_found and dist is not None and abs(dist - target) <= BAND
                 view = img.copy()
                 for f, col in ((fy, (0, 255, 0)), (fs, (255, 128, 0))):
                     if f is not None:
@@ -162,6 +164,8 @@ try:
                     countdown_start = None
                     if dist is None:
                         msg = "stand in front of the camera"
+                    elif not face_found:
+                        msg = "face not found - follow the pose below"
                     elif dist < target:
                         msg = f"step BACK {target - dist:.1f} m"
                     else:
@@ -196,6 +200,8 @@ try:
             if not taken:
                 meta.append((seg, pose, -1.0, False, False, 0, 0))
                 print(f"  #{shot} {seg} {pose[:24]:24s} skipped (not in the distance band for {SHOT_TIMEOUT:.0f} s)", flush=True)
+except (KeyboardInterrupt, RuntimeError) as e:  # Ctrl-C or camera timeout: keep the shots taken so far
+    print(f"stopped early ({type(e).__name__}: {e}); saving what was captured", flush=True)
 finally:
     pipe.stop()
 
@@ -204,8 +210,7 @@ if not emb["yunet"] and not emb["scrfd"]:
 save = {"name": args.name, "model": "arcface", "created": time.strftime("%Y-%m-%d %H:%M"),
         "meta_json": json.dumps(meta)}
 old_counts = {}
-if args.append:
-    prev = np.load(args.out)
+if prev is not None:
     save["meta_json"] = json.dumps(json.loads(str(prev["meta_json"])) + meta)
     save["created"] = str(prev["created"]) + " + " + save["created"]
     for name in ("yunet", "scrfd"):

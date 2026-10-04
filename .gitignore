@@ -2,3 +2,8 @@
 __pycache__/
 *.pyc
 .env.*
+
+# owner galleries (face embeddings) and camera snapshots stay on the Jetson
+*.npz
+owner/
+*.jpg

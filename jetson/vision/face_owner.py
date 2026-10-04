@@ -12,9 +12,7 @@ Models (in models/, not in the repository):
 Library use (person_distance.py --owner owner/paul_guided.npz):
   fid = FaceID("models", detector="scrfd"); fid.load_owner("owner/paul_guided.npz"); fid.match(bgr_image)
 """
-import argparse
 import os
-import time
 
 import cv2
 import numpy as np
@@ -112,6 +110,8 @@ class FaceID:
         # image-right mouth corner, matching the ArcFace template order.
         lm = np.array(face[4:14], dtype=np.float32).reshape(5, 2)
         M, _ = cv2.estimateAffinePartial2D(lm, ARC_TEMPLATE, method=cv2.LMEDS)
+        if M is None:  # degenerate landmarks (e.g. a face cut off at the image edge)
+            return None
         crop = cv2.warpAffine(img, M, (112, 112), borderValue=0.0)
         blob = cv2.dnn.blobFromImage(crop, 1.0 / 127.5, (112, 112), (127.5, 127.5, 127.5), swapRB=True)
         f = self.sess.run(None, {self.inp: blob})[0].flatten().astype(np.float32)
@@ -122,7 +122,9 @@ class FaceID:
         assert "model" in d.files and str(d["model"]) == "arcface", f"{path} is not an ArcFace enrollment"
         self.owner_name = str(d["name"])
         key = f"samples_{self.detector}"  # guided enrollment stores one gallery per face detector
-        S = (d[key] if key in d.files else d["samples"]).astype(np.float32)
+        if key not in d.files:
+            raise SystemExit(f"{path} has no {key} gallery; enroll with face_enroll_guided.py")
+        S = d[key].astype(np.float32)
         mean = S.mean(0)
         self.owner = mean / np.linalg.norm(mean)
         self.owner_samples = S
@@ -139,6 +141,9 @@ class FaceID:
         """Return [(face_row, similarity, is_owner)] for every face found."""
         out = []
         for f in self.faces(img):
-            sim = self.similarity(self.embed(img, f))
+            e = self.embed(img, f)
+            if e is None:
+                continue
+            sim = self.similarity(e)
             out.append((f, sim, sim >= self.threshold))
         return out

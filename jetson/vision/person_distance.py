@@ -1,22 +1,31 @@
 #!/usr/bin/env python3
-"""Live person detection + distance + bearing with the D436 and YOLO26n (TensorRT FP16).
+"""Live person detection + tracking + distance + bearing with the D436 and YOLO26s (TensorRT FP16).
 
-For every person box: distance = median of valid depth pixels in the central 40% of the box
+Boxes are tracked with ByteTrack (Ultralytics), so each person keeps an ID (#n) across frames.
+With --owner, the owner is bound to a track ID: the owner's face must match on the same track in
+OWNER_HITS consecutive face checks; the binding is released when the track is gone for LOST_RELEASE s
+or when REVERIFY_MISSES face checks find a non-owner face on that track.
+
+For every box: distance = median of valid depth pixels in the central 40% of the box
 (aligned to color), bearing = horizontal angle from the color camera's optical axis
-(negative = left of center). Prints a line per second, times every stage, and saves one
-annotated frame.
+(negative = left of center). Prints a line per second and times every stage. --out saves one
+annotated frame (off by default: it contains faces).
 
 Run (Jetson), mounting our RSUSB librealsense build and the USB devices into the container:
-  docker run --rm --runtime nvidia --ipc host \
+  docker run --rm --runtime nvidia --ipc host -p 127.0.0.1:8090:8090 \
     -v /home/paulcho/yolo:/work -w /work \
-    -v /home/paulcho/src/librealsense/build/Release:/rs:ro -e PYTHONPATH=/rs \
+    -v /home/paulcho/src/librealsense/build/Release:/rs:ro -e PYTHONPATH=/rs:/work/pylib -e LD_LIBRARY_PATH=/rs \
     -v /dev/bus/usb:/dev/bus/usb --device-cgroup-rule='c 189:* rmw' \
-    ultralytics/ultralytics:latest-jetson-jetpack6 python3 person_distance.py --seconds 20
+    ultralytics/ultralytics:latest-jetson-jetpack6 python3 person_distance.py \
+    --owner owner/paul_guided.npz --stream-port 8090 --seconds 600
+The view port is published on the Jetson's localhost only; on the Mac use an SSH tunnel
+(ssh -N -L 8090:127.0.0.1:8090 paulcho@192.168.1.234) and open http://localhost:8090.
 """
 import argparse
 import math
 import threading
 import time
+from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import cv2
@@ -26,9 +35,11 @@ from ultralytics import YOLO
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--seconds", type=float, default=20)
-ap.add_argument("--engine", default="yolo26n.engine")
-ap.add_argument("--conf", type=float, default=0.4)
-ap.add_argument("--out", default="person_distance.jpg")
+ap.add_argument("--engine", default="yolo26s.engine")
+ap.add_argument("--conf", type=float, default=0.1,
+                help="detector threshold; low-score boxes feed ByteTrack's second association stage")
+ap.add_argument("--tracker", default="bytetrack.yaml", help="Ultralytics tracker config (bytetrack.yaml, botsort.yaml)")
+ap.add_argument("--out", default="", help="save one annotated frame here (contains faces; never commit it)")
 ap.add_argument("--all-classes", action="store_true", help="detect all 80 COCO classes, not only person")
 ap.add_argument("--owner", default="", help="owner file from face_enroll_guided.py, e.g. owner/paul_guided.npz")
 ap.add_argument("--face-detector", choices=["scrfd", "yunet"], default="scrfd")
@@ -38,8 +49,11 @@ ap.add_argument("--stream-port", type=int, default=0,
 args = ap.parse_args()
 
 latest_jpeg = [None]
+clients = [0]  # frames are JPEG-encoded only while someone is watching
 if args.stream_port:
     class Handler(BaseHTTPRequestHandler):
+        timeout = 10  # drop a viewer whose connection stalls
+
         def log_message(self, *a):
             pass
 
@@ -54,18 +68,39 @@ if args.stream_port:
             self.send_response(200)
             self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
             self.end_headers()
+            clients[0] += 1
             try:
                 while True:
                     jpg = latest_jpeg[0]
                     if jpg is not None:
                         self.wfile.write(b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + jpg + b"\r\n")
                     time.sleep(0.04)
-            except (BrokenPipeError, ConnectionResetError):
+            except OSError:  # viewer closed the page, reset, or timed out
                 pass
+            finally:
+                clients[0] -= 1
 
+    # 0.0.0.0 inside the container; docker run -p 127.0.0.1:... keeps it off the LAN
     server = ThreadingHTTPServer(("0.0.0.0", args.stream_port), Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     print(f"live view on port {args.stream_port}", flush=True)
+
+fid = None
+if args.owner:
+    from face_owner import FaceID
+    fid = FaceID("models", detector=args.face_detector)
+    fid.load_owner(args.owner)
+    print(f"face detector {args.face_detector}, ArcFace threshold {fid.threshold}", flush=True)
+    print(f"owner: {fid.owner_name} ({len(fid.owner_samples)} samples)", flush=True)
+OWNER_HITS = 2         # consecutive face checks matching the owner on one track before it is bound
+REVERIFY_MISSES = 3    # face checks finding a non-owner face on the owner track before it is released
+LOST_RELEASE = 2.0     # seconds the owner track may be missing before it is released
+owner_tid, owner_sim, owner_last, owner_misses = None, 0.0, 0.0, 0
+hits = {}              # track id -> consecutive owner-face matches
+face_scores = []  # (x-centre px, similarity) of every face in the last face check, for the log
+
+model = YOLO(args.engine, task="detect")
+PERSON = [k for k, v in model.names.items() if v == "person"][0] if hasattr(model, "names") and model.names else 0
 
 W, H, FPS = 848, 480, 30
 cfg = rs.config()
@@ -78,28 +113,19 @@ intr = prof.get_stream(rs.stream.color).as_video_stream_profile().get_intrinsics
 align = rs.align(rs.stream.color)
 print(f"color intrinsics fx {intr.fx:.1f} cx {intr.ppx:.1f}; depth scale {scale}")
 
-fid = None
-if args.owner:
-    from face_owner import FaceID
-    fid = FaceID("models", detector=args.face_detector)
-    fid.load_owner(args.owner)
-    print(f"face detector {args.face_detector}, ArcFace threshold {fid.threshold}", flush=True)
-    print(f"owner: {fid.owner_name} ({len(fid.owner_samples)} samples)", flush=True)
-owner_box, owner_sim, owner_seen = None, 0.0, 0.0
-face_scores = []  # (x-centre px, similarity) of every face in the last face check, for the log
-
-model = YOLO(args.engine, task="detect")
-PERSON = [k for k, v in model.names.items() if v == "person"][0] if hasattr(model, "names") and model.names else 0
-
-timing = {"wait": [], "align": [], "yolo": [], "post": []}
-frames = 0
+timing = {k: deque(maxlen=3000) for k in ("wait", "align", "yolo", "post")}
+frames, timeouts = 0, 0
 t0 = time.time()
 next_print = t0 + 1
 saved = False
 try:
     while time.time() - t0 < args.seconds:
         a = time.perf_counter()
-        fs = pipe.wait_for_frames(timeout_ms=2000)
+        try:
+            fs = pipe.wait_for_frames(timeout_ms=2000)
+        except RuntimeError:  # a dropped USB transfer should not end the run
+            timeouts += 1
+            continue
         b = time.perf_counter()
         fs = align.process(fs)
         d_frame, c_frame = fs.get_depth_frame(), fs.get_color_frame()
@@ -108,13 +134,14 @@ try:
         depth = np.asanyarray(d_frame.get_data()).astype(np.float32) * scale
         img = np.asanyarray(c_frame.get_data())
         c = time.perf_counter()
-        res = model(img, imgsz=640, conf=args.conf, classes=None if args.all_classes else [PERSON],
-                    device=0, verbose=False)[0]
+        res = model.track(img, persist=True, tracker=args.tracker, imgsz=640, conf=args.conf,
+                          classes=None if args.all_classes else [PERSON], device=0, verbose=False)[0]
         d = time.perf_counter()
 
         people = []
-        for (x1, y1, x2, y2), conf, cls in zip(res.boxes.xyxy.cpu().numpy(), res.boxes.conf.cpu().numpy(),
-                                               res.boxes.cls.cpu().numpy()):
+        ids = res.boxes.id.int().cpu().tolist() if res.boxes.id is not None else [None] * len(res.boxes)
+        for (x1, y1, x2, y2), conf, cls, tid in zip(res.boxes.xyxy.cpu().numpy(), res.boxes.conf.cpu().numpy(),
+                                                    res.boxes.cls.cpu().numpy(), ids):
             w, h = x2 - x1, y2 - y1
             cx1, cx2 = int(x1 + 0.3 * w), int(x2 - 0.3 * w)
             cy1, cy2 = int(y1 + 0.3 * h), int(y2 - 0.3 * h)
@@ -123,40 +150,45 @@ try:
             dist = float(np.median(valid)) if valid.size > 20 else float("nan")
             u = (x1 + x2) / 2
             bearing = math.degrees(math.atan2(u - intr.ppx, intr.fx))
-            people.append((dist, bearing, float(conf), (int(x1), int(y1), int(x2), int(y2)), res.names[int(cls)]))
-        # Owner: find faces, give the owner label to the person box that contains the owner's face.
+            people.append((dist, bearing, float(conf), (int(x1), int(y1), int(x2), int(y2)),
+                           res.names[int(cls)], tid))
+        now = time.time()
         if fid is not None and frames % args.face_every == 0:
             matches = fid.match(img)
             face_scores = [(int(f[0] + f[2] / 2), round(sim, 2)) for f, sim, _ in matches]
-            # Only one owner exists: consider only the best-scoring face, and only if it passes the threshold.
-            best_face = max(matches, key=lambda m: m[1], default=None)
-            for f, sim, is_owner in ([best_face] if best_face else []):
-                if not is_owner:
-                    continue
+
+            def track_of(f):
+                # the smallest person box that contains the face centre (the nearest of overlapping people)
                 fx, fy = f[0] + f[2] / 2, f[1] + f[3] / 2
-                for p in people:
-                    x1, y1, x2, y2 = p[3]
-                    if p[4] == "person" and x1 <= fx <= x2 and y1 <= fy <= y2:
-                        owner_box, owner_sim, owner_seen = p[3], sim, time.time()
-        if owner_box is not None and time.time() - owner_seen < 1.5:
-            # keep the label on the person box that overlaps the last owner box most (simple persistence)
-            def iou(a, b):
-                ix = max(0, min(a[2], b[2]) - max(a[0], b[0])); iy = max(0, min(a[3], b[3]) - max(a[1], b[1]))
-                inter = ix * iy
-                return inter / ((a[2] - a[0]) * (a[3] - a[1]) + (b[2] - b[0]) * (b[3] - b[1]) - inter + 1e-9)
-            best = max((p for p in people if p[4] == "person"), key=lambda p: iou(p[3], owner_box), default=None)
-            if best is not None and iou(best[3], owner_box) > 0.3:
-                i = people.index(best)
-                people[i] = best[:4] + (f"{fid.owner_name} (owner) {owner_sim:.2f}",)
-                owner_box = best[3]
+                inside = [p for p in people if p[4] == "person" and p[5] is not None
+                          and p[3][0] <= fx <= p[3][2] and p[3][1] <= fy <= p[3][3]]
+                return min(inside, key=lambda p: (p[3][2] - p[3][0]) * (p[3][3] - p[3][1]))[5] if inside else None
+
+            # Only one owner exists: only the best-scoring face can be the owner, and only above the threshold.
+            best = max(matches, key=lambda m: m[1], default=None)
+            t = track_of(best[0]) if best is not None and best[2] else None
+            hits = {t: hits.get(t, 0) + 1} if t is not None else {}
+            if t is not None and (t == owner_tid or hits[t] >= OWNER_HITS):
+                owner_tid, owner_sim, owner_last, owner_misses = t, best[1], now, 0
+            elif owner_tid is not None and any(track_of(f) == owner_tid for f, _, _ in matches):
+                owner_misses += 1  # a face on the owner track that is not the owner
+                if owner_misses >= REVERIFY_MISSES:
+                    owner_tid = None
+        if owner_tid is not None:
+            if any(p[5] == owner_tid for p in people):
+                owner_last = now
+            elif now - owner_last > LOST_RELEASE:
+                owner_tid = None
+        people = [p[:4] + (f"{fid.owner_name} (owner) {owner_sim:.2f}",) + p[5:]
+                  if owner_tid is not None and p[5] == owner_tid else p for p in people]
         e = time.perf_counter()
 
-        if args.stream_port:
+        if args.stream_port and clients[0]:
             view = img.copy()
-            for dist, bearing, conf, (x1, y1, x2, y2), name in people:
+            for dist, bearing, conf, (x1, y1, x2, y2), name, tid in people:
                 color = (0, 215, 255) if "(owner)" in name else (0, 255, 0)
                 cv2.rectangle(view, (x1, y1), (x2, y2), color, 3 if "(owner)" in name else 2)
-                cv2.putText(view, f"{name} {conf:.0%} {dist:.2f} m {bearing:+.0f} deg", (x1, max(y1 - 8, 15)),
+                cv2.putText(view, f"#{tid} {name} {conf:.0%} {dist:.2f} m {bearing:+.0f} deg", (x1, max(y1 - 8, 15)),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
             dvis = cv2.applyColorMap(cv2.convertScaleAbs(np.clip(depth, 0, 4.0), alpha=255 / 4.0), cv2.COLORMAP_TURBO)
             dvis[depth == 0] = 0
@@ -173,13 +205,13 @@ try:
         frames += 1
 
         if time.time() >= next_print:
-            desc = ", ".join(f"{p[4]} {p[0]:.2f} m @ {p[1]:+.0f} deg ({p[2]:.2f})" for p in sorted(people, key=lambda q: q[0])) or "nothing"
+            desc = ", ".join(f"#{p[5]} {p[4]} {p[0]:.2f} m @ {p[1]:+.0f} deg ({p[2]:.2f})" for p in sorted(people, key=lambda q: q[0])) or "nothing"
             extra = f"  faces(x px: score) {face_scores}" if fid is not None else ""
             print(f"t={time.time() - t0:5.1f}s  {len(people)} object(s): {desc}{extra}", flush=True)
-            next_print += 1
+            next_print = time.time() + 1
 
-        if people and not saved and time.time() - t0 > 2:
-            for dist, bearing, conf, (x1, y1, x2, y2), name in people:
+        if args.out and people and not saved and time.time() - t0 > 2:
+            for dist, bearing, conf, (x1, y1, x2, y2), name, tid in people:
                 cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
                 cv2.putText(img, f"{dist:.2f} m {bearing:+.0f} deg", (x1, max(y1 - 8, 15)),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
@@ -189,8 +221,11 @@ finally:
     pipe.stop()
 
 el = time.time() - t0
-print(f"\n{frames} frames in {el:.1f} s = {frames / el:.1f} fps end-to-end")
+print(f"\n{frames} frames in {el:.1f} s = {frames / el:.1f} fps end-to-end; frame timeouts {timeouts}")
 for k, v in timing.items():
+    if not v:
+        continue
     v = np.array(v)
     print(f"  {k:5s} median {np.median(v):6.2f} ms  p90 {np.percentile(v, 90):6.2f} ms")
-print(f"annotated frame: {args.out if saved else 'none (no person seen after 2 s)'}")
+if args.out:
+    print(f"annotated frame: {args.out if saved else 'none (no person seen after 2 s)'}")

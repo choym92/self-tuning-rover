@@ -4,17 +4,15 @@
 it records, per detector: detection rate, detector time, face width, and the ArcFace owner score.
 
 Run (Jetson, Ultralytics container, camera mounted as for person_distance.py):
-  python3 face_det_compare.py --owner owner/paul_arcface.npz --stream-port 8090
+  python3 face_det_compare.py --owner owner/paul_guided.npz --stream-port 8090
 """
 import argparse
-import os
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import cv2
 import numpy as np
-import onnxruntime as ort
 import pyrealsense2 as rs
 
 from face_owner import FaceID
@@ -27,55 +25,6 @@ SEGMENTS = [("1 m", 1.0, "face the camera"), ("2 m", 2.0, "face the camera"), ("
 BAND = 0.2
 FRAMES_PER_SEGMENT = 60
 SEGMENT_TIMEOUT = 60
-
-
-class SCRFD:
-    """Minimal SCRFD decoder for det_10g.onnx (3 strides, 2 anchors per location, 5 landmarks)."""
-
-    def __init__(self, path, size=640, score=0.5, nms=0.4):
-        self.sess = ort.InferenceSession(path, providers=["CUDAExecutionProvider", "CPUExecutionProvider"])
-        self.inp = self.sess.get_inputs()[0].name
-        self.size, self.score, self.nms = size, score, nms
-        self.strides, self.na = (8, 16, 32), 2
-        self.centers = {}
-
-    def _centers(self, h, w, s):
-        key = (h, w, s)
-        if key not in self.centers:
-            yy, xx = np.mgrid[:h, :w]
-            c = (np.stack([xx, yy], -1).reshape(-1, 2) * s).astype(np.float32)
-            self.centers[key] = np.repeat(c, self.na, axis=0)
-        return self.centers[key]
-
-    def detect(self, img):
-        H, W = img.shape[:2]
-        scale = self.size / max(H, W)
-        nh, nw = int(H * scale), int(W * scale)
-        canvas = np.zeros((self.size, self.size, 3), np.uint8)
-        canvas[:nh, :nw] = cv2.resize(img, (nw, nh))
-        blob = cv2.dnn.blobFromImage(canvas, 1.0 / 128, (self.size, self.size), (127.5, 127.5, 127.5), swapRB=True)
-        outs = self.sess.run(None, {self.inp: blob})
-        boxes, scores, kpss = [], [], []
-        for i, s in enumerate(self.strides):
-            sc, bb, kp = outs[i].reshape(-1), outs[i + 3].reshape(-1, 4) * s, outs[i + 6].reshape(-1, 10) * s
-            c = self._centers(self.size // s, self.size // s, s)
-            keep = np.where(sc >= self.score)[0]
-            if not len(keep):
-                continue
-            b = np.hstack([c[keep] - bb[keep, :2], c[keep] + bb[keep, 2:]])
-            k = (c[keep][:, None, :] + kp[keep].reshape(-1, 5, 2))
-            boxes.append(b); scores.append(sc[keep]); kpss.append(k)
-        if not boxes:
-            return []
-        boxes, scores, kpss = np.vstack(boxes) / scale, np.hstack(scores), np.vstack(kpss) / scale
-        xywh = [[float(x1), float(y1), float(x2 - x1), float(y2 - y1)] for x1, y1, x2, y2 in boxes]
-        idx = cv2.dnn.NMSBoxes(xywh, scores.tolist(), self.score, self.nms)
-        out = []
-        for i in np.array(idx).flatten():
-            x, y, w, h = xywh[i]
-            # same row layout as YuNet: x, y, w, h, 5 landmarks (x, y), score
-            out.append(np.array([x, y, w, h, *kpss[i].reshape(-1), scores[i]], np.float32))
-        return out
 
 
 ap = argparse.ArgumentParser()
@@ -167,7 +116,9 @@ try:
             for name, color in (("yunet", (0, 255, 0)), ("scrfd", (255, 128, 0))):
                 f, ms = row[name]
                 scorer = fid if name == "yunet" else fid_s
-                score = scorer.similarity(scorer.embed(img, f)) if f is not None else None
+                e = scorer.embed(img, f) if f is not None else None
+                score = scorer.similarity(e) if e is not None else None
+                f = f if e is not None else None
                 if in_band:
                     rec[name].append((f is not None, ms, int(f[2]) if f is not None else 0, score))
                 if f is not None:

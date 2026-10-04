@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Benchmark YOLO26n on the Jetson inside the Ultralytics container.
+"""Benchmark a YOLO26 model (default yolo26s) on the Jetson inside the Ultralytics container.
 
 Exports the PyTorch weights to a TensorRT FP16 engine (once, cached in /work), then times
 inference on a fixed image and reports latency percentiles, plus the engine file size and
@@ -18,7 +18,7 @@ from ultralytics import YOLO
 
 import sys
 
-NAME = sys.argv[1] if len(sys.argv) > 1 else "yolo26n"
+NAME = sys.argv[1] if len(sys.argv) > 1 else "yolo26s"
 WEIGHTS = f"{NAME}.pt"
 ENGINE = f"{NAME}.engine"
 IMAGE = "https://ultralytics.com/images/bus.jpg"

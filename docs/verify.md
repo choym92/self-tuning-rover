@@ -276,3 +276,11 @@ Findings: detection rates are identical; with matched galleries SCRFD scores equ
 
 YuNet runs on the CPU through OpenCV, so it loads the CPU and leaves the GPU almost unchanged; SCRFD moves that work to the GPU. Either way the frame rate drops because face detection + ArcFace run synchronously inside the capture loop (every 3rd frame, full 848x480 frame). Planned fixes: detect faces only inside person boxes, run recognition in a separate thread, and re-check identity only occasionally once a tracked person is confirmed.
 
+
+### ByteTrack tracking with owner bound to a track ID (2026-10-03, Jetson, owner seated at 0.53 m)
+
+`person_distance.py --owner owner/paul_guided.npz --seconds 30` (YOLO26s `model.track` with `bytetrack.yaml`, conf 0.1, SCRFD + ArcFace every 3rd frame). ByteTrack needs `lap`, kept in `~/yolo/pylib` (container PYTHONPATH) instead of being auto-installed on every run.
+
+- The owner kept track ID #1 for the whole run; the label was bound about 1 s after the first face check (2 consecutive matches required), ArcFace score 0.64-0.72.
+- 484 frames in 31.7 s = 15.3 fps including about 6 s of start-up, so not directly comparable with the 17.1 fps above; median stage times: align 9.7 ms, YOLO + tracker 18.1 ms, post 1.1 ms (p90 54.6 ms on face-check frames). 0 frame timeouts.
+- UNVERIFIED: release after the owner leaves, re-verification when another person takes over the track, and ID switches with several people crossing. Clock lock state was not checked for this run.
