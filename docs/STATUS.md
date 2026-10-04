@@ -62,14 +62,24 @@ Next steps:
 - OpenClaw may receive a bounded later trial. NemoClaw is deferred on the 8 GB
   board. Research snapshot: `docs/reference/2026-09-25-agent-runtime-options.md`.
 
+## Vision (2026-10-03)
+
+- DECIDED: detector YOLO26s TensorRT FP16; owner recognition SCRFD + ArcFace R50 with
+  the guided gallery `~/yolo/owner/paul_guided.npz` (34 shots). Evidence and costs in
+  `docs/verify.md`; choices in `docs/decisions.md`.
+- PLANNED by Paul (later): time-sharing between vision and the LLM on the 8 GB board
+  (vision + LLM together measured near 7.3 of 7.6 GB). Pause or slow face
+  recognition while the LLM answers; consider headless mode and loading a small LLM
+  on demand.
+- Pending: brother re-test with the 34-shot gallery; recognition on another day;
+  speed-up (faces only inside person boxes, recognition in a separate thread).
+
 ## Hardware
 
 - RealSense D436: arrived; first live depth + color + IMU check passed on the
   Jetson over USB 3 on 2026-10-03 (`docs/verify.md`). 10-minute IMU soak with video
   passed (0.006% gyro samples missing, 0 video drops). Still to do: depth accuracy
   against a tape measure. The Mac is not a usable live host.
-- Person detection + distance: YOLO26n TensorRT FP16 + D436 runs live at ~21 fps
-  end-to-end in the Ultralytics container (2026-10-03, `docs/verify.md`).
 - Waveshare UGV Rover PT Acce: selected but repository status says not ordered.
   Never promote the hypothetical assembled-rover discussion to a purchase fact.
 - Final microphone: not purchased. Test the Waveshare audio board first; the
