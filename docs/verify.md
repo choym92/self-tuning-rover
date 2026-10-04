@@ -316,3 +316,23 @@ The pose model finds the same people for about 0.4 ms more per frame, so in pers
 - RF-DETR-Small vs YOLO26s: 1.4x the GPU time on a T4 (published), 1.7x on this Jetson.
 - The first benchmark run printed 0 persons for every RF-DETR model: RF-DETR returns COCO category ids (person = 1), which the script mapped through a 0-indexed list. Fixed in the script; the label check above uses the corrected mapping.
 - TensorRT runner for RF-DETR (`rfdetr_trt.py`, pre/post-processing copied from rfdetr 1.11.1) checked against rfdetr's PyTorch `predict` on bus.jpg + 20 live frames at confidence >= 0.3: Nano 75 PyTorch vs 72 TensorRT detections, 71 matched (same class, IoU > 0.8), score difference mean 0.011 (max 0.21, borderline detections near 0.3), box 1-IoU mean 0.002; Small 75 vs 74, 73 matched, score difference mean 0.009 (max 0.19). Per frame including pre/post-processing: Nano 72 ms PyTorch vs 13.2 ms TensorRT, Small 77 vs 18.1 ms. In `detector_compare.py` with all three as TensorRT: YOLO26s 16 ms, RF-DETR-Nano 14 ms, RF-DETR-Small 19 ms per frame (median, pre/post included).
+
+### Real-use detector comparison in Paul's room: YOLO26s vs RF-DETR-Nano vs RF-DETR-Small (2026-10-03)
+
+`detector_compare.py`: Paul seated, pointing the D436 at 10 parts of the room, 10 s each (~180 frames per scene); every frame through all three TensorRT FP16 engines. Per frame including pre/post-processing: YOLO26s 15 ms, RF-DETR-Nano 14 ms, RF-DETR-Small 19 ms. Correctness was judged by eye from one annotated frame per scene (5 of 10 scenes inspected), so it is INFERENCE beyond the per-frame percentages.
+
+Share of frames detected at confidence >= 0.5 (>= 0.3), where the models disagreed:
+
+| Scene | Object (judged) | YOLO26s | RF-DETR-Nano | RF-DETR-Small |
+|---|---|---|---|---|
+| 2 bedroom | chair | 1% (13%) | 44% (91%) | 47% (96%) |
+| 4 desk corner | MacBook screen: YOLO said tv, RF-DETR laptop (laptop is right) | laptop 1% (11%) | 74% (88%) | 77% (87%) |
+| 8 seated | chair | 1% (10%) | 46% (91%) | 32% (82%) |
+| 9 seated | desk chair behind Paul | 0% (2%) | 21% (72%) | 68% (73%) |
+| 6 desk | laptop | 84% (91%) | 47% (86%) | 53% (84%) |
+| 10 desk | laptop | 49% (86%) | 3% (34%) | 9% (47%) |
+
+- Ties: person, tv, keyboard, mouse, bottle and bed were found about equally often by all three.
+- RF-DETR found chairs that YOLO26s almost never reported; YOLO26s reported laptops more often in two desk scenes.
+- RF-DETR produced more low-confidence (0.3-0.5) guesses that look wrong in the inspected frames (remote, cell phone on a keypad, book for the Jetson box); at the 0.5 threshold these mostly disappear.
+- Not covered: people at 3-5 m (RF-DETR-Nano sees a 384 px image vs 640 px for YOLO26s), other rooms and lighting.
