@@ -349,3 +349,15 @@ Share of frames detected at confidence >= 0.5 (>= 0.3), where the models disagre
 | 3 m back turned (~2 m) | 100%, 0.93 | 100%, 0.94 | 100%, 0.94 |
 
 (% of frames with a person at confidence >= 0.5; all were also 100% at >= 0.3.) No difference between the models at 1-2 m. The script now takes the distance from the most confident person box of any model (checked live: 0.54-0.56 m for Paul seated at the desk, matching the live loop); a rerun recorded no frames because Paul was seated outside every band. People beyond 3 m are not yet tested.
+
+### RAM and GPU load per detector (2026-10-03, Jetson, GPU locked at 1020 MHz)
+
+`detector_cost.py`: one container per detector running only the D436 colour stream (848x480, 30 fps) through that TensorRT FP16 detector for 40 s, no face recognition and no viewer. Host side: tegrastats averaged over 20 s while running (idle baseline 1940 MB, GPU 0%), container memory = highest of three `docker stats` samples.
+
+| Detector | System RAM (vs idle) | Container RAM | GPU (GR3D) | fps | Detector time median |
+|---|---|---|---|---|---|
+| YOLO26s (Ultralytics) | 2721 MB (+781) | 779 MiB | 23% | 28.9 | 14.5 ms |
+| RF-DETR-Nano (rfdetr_trt.py) | 2633 MB (+693) | 812 MiB | 24% | 28.7 | 13.6 ms |
+| RF-DETR-Small (rfdetr_trt.py) | 2635 MB (+695) | 705 MiB | 42% | 29.6 | 18.6 ms |
+
+All three keep up with the 30 fps camera. YOLO26s and RF-DETR-Nano use the same GPU share and RAM within about 100 MB (the two RAM measures disagree on the order, so the difference is within measurement noise); RF-DETR-Small needs almost twice the GPU. About 0.7-0.8 GB per process is the PyTorch/CUDA runtime that both paths load, not the models (engines 23-61 MB).
