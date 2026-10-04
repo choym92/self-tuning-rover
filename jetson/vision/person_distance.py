@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""Live person detection + tracking + distance + bearing with the D436 and YOLO26s (TensorRT FP16).
+"""Live person detection + tracking + distance + bearing with the D436 and YOLO26s or RF-DETR (TensorRT FP16).
 
-Boxes are tracked with ByteTrack (Ultralytics), so each person keeps an ID (#n) across frames.
+--engine yolo26s.engine (default) runs through Ultralytics; --engine rfdetr/RFDETRNano.engine runs
+through rfdetr_trt.py, with the same Ultralytics ByteTrack fed by its boxes.
+Boxes are tracked with ByteTrack, so each person keeps an ID (#n) across frames.
 With --owner, the owner is bound to a track ID: the owner's face must match on the same track in
 OWNER_HITS consecutive face checks; the binding is released when the track is gone for LOST_RELEASE s
 or when REVERIFY_MISSES face checks find a non-owner face on that track.
@@ -99,14 +101,28 @@ owner_tid, owner_sim, owner_last, owner_misses = None, 0.0, 0.0, 0
 hits = {}              # track id -> consecutive owner-face matches
 face_scores = []  # (x-centre px, similarity) of every face in the last face check, for the log
 
+RFDETR = "rfdetr" in args.engine.lower()  # e.g. rfdetr/RFDETRNano.engine (built by rfdetr_bench.py)
 POSE = "pose" in args.engine  # e.g. yolo26s-pose.engine: person boxes + 17 COCO keypoints
-model = YOLO(args.engine, task="pose" if POSE else "detect")
+if RFDETR:
+    from rfdetr_trt import RFDETRTRT
+    from ultralytics.data.converter import coco91_to_coco80_class
+    from ultralytics.engine.results import Boxes
+    from ultralytics.trackers.byte_tracker import BYTETracker
+    from ultralytics.utils import YAML, IterableSimpleNamespace
+    from ultralytics.utils.checks import check_yaml
+    rf = RFDETRTRT(args.engine)
+    COCO80 = coco91_to_coco80_class()  # index = RF-DETR COCO category id - 1 -> Ultralytics 80-class index
+    NAMES = YAML.load(check_yaml("coco.yaml"))["names"]
+    tracker = BYTETracker(IterableSimpleNamespace(**YAML.load(check_yaml(args.tracker))))
+else:
+    model = YOLO(args.engine, task="pose" if POSE else "detect")
+    NAMES = model.names
 # COCO keypoints: 0 nose, 1-2 eyes, 3-4 ears, 5-6 shoulders, 7-8 elbows, 9-10 wrists, 11-12 hips, 13-14 knees,
 # 15-16 ankles (odd = person's left, even = person's right)
 SKELETON = [(5, 7), (7, 9), (6, 8), (8, 10), (5, 6), (5, 11), (6, 12), (11, 12), (11, 13), (13, 15),
             (12, 14), (14, 16), (0, 1), (0, 2), (1, 3), (2, 4)]
 KP_CONF = 0.5
-PERSON = [k for k, v in model.names.items() if v == "person"][0] if hasattr(model, "names") and model.names else 0
+PERSON = [k for k, v in NAMES.items() if v == "person"][0]
 
 W, H, FPS = 848, 480, 30
 cfg = rs.config()
@@ -140,16 +156,26 @@ try:
         depth = np.asanyarray(d_frame.get_data()).astype(np.float32) * scale
         img = np.asanyarray(c_frame.get_data())
         c = time.perf_counter()
-        res = model.track(img, persist=True, tracker=args.tracker, imgsz=640, conf=args.conf,
-                          classes=None if args.all_classes else [PERSON], device=0, verbose=False)[0]
+        if RFDETR:
+            boxes, scores, labels = rf.predict(img, threshold=args.conf)
+            cls80 = np.array([COCO80[int(lb) - 1] if 0 < lb <= len(COCO80) and COCO80[int(lb) - 1] is not None
+                              else -1 for lb in labels], dtype=np.float32)
+            keep = cls80 >= 0 if args.all_classes else cls80 == PERSON
+            det = Boxes(np.column_stack([boxes[keep], scores[keep], cls80[keep]]), img.shape[:2])
+            tr = np.asarray(tracker.update(det, img)).reshape(-1, 8)  # x1, y1, x2, y2, id, score, cls, idx
+            xyxy, confs, clss, ids = tr[:, :4], tr[:, 5], tr[:, 6], tr[:, 4].astype(int).tolist()
+            kps = [None] * len(ids)
+        else:
+            res = model.track(img, persist=True, tracker=args.tracker, imgsz=640, conf=args.conf,
+                              classes=None if args.all_classes else [PERSON], device=0, verbose=False)[0]
+            # With no active track Ultralytics leaves the raw conf>=0.1 detections in res; show tracked boxes only.
+            ids = res.boxes.id.int().cpu().tolist() if res.boxes.id is not None else []
+            xyxy, confs, clss = res.boxes.xyxy.cpu().numpy(), res.boxes.conf.cpu().numpy(), res.boxes.cls.cpu().numpy()
+            kps = res.keypoints.data.cpu().numpy() if POSE else [None] * len(ids)  # (x, y, confidence) per keypoint
         d = time.perf_counter()
 
         people = []
-        # With no active track Ultralytics leaves the raw conf>=0.1 detections in res; show tracked boxes only.
-        ids = res.boxes.id.int().cpu().tolist() if res.boxes.id is not None else []
-        kps = res.keypoints.data.cpu().numpy() if POSE else [None] * len(ids)  # (x, y, confidence) per keypoint
-        for (x1, y1, x2, y2), conf, cls, tid, kp in zip(res.boxes.xyxy.cpu().numpy(), res.boxes.conf.cpu().numpy(),
-                                                        res.boxes.cls.cpu().numpy(), ids, kps):
+        for (x1, y1, x2, y2), conf, cls, tid, kp in zip(xyxy, confs, clss, ids, kps):
             w, h = x2 - x1, y2 - y1
             cx1, cx2 = int(x1 + 0.3 * w), int(x2 - 0.3 * w)
             cy1, cy2 = int(y1 + 0.3 * h), int(y2 - 0.3 * h)
@@ -159,7 +185,7 @@ try:
             u = (x1 + x2) / 2
             bearing = math.degrees(math.atan2(u - intr.ppx, intr.fx))
             people.append((dist, bearing, float(conf), (int(x1), int(y1), int(x2), int(y2)),
-                           res.names[int(cls)], tid, kp))
+                           NAMES[int(cls)], tid, kp))
         now = time.time()
         if fid is not None and frames % args.face_every == 0:
             matches = fid.match(img)

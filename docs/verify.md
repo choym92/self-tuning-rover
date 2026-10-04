@@ -361,3 +361,4 @@ Share of frames detected at confidence >= 0.5 (>= 0.3), where the models disagre
 | RF-DETR-Small (rfdetr_trt.py) | 2635 MB (+695) | 705 MiB | 42% | 29.6 | 18.6 ms |
 
 All three keep up with the 30 fps camera. YOLO26s and RF-DETR-Nano use the same GPU share and RAM within about 100 MB (the two RAM measures disagree on the order, so the difference is within measurement noise); RF-DETR-Small needs almost twice the GPU. About 0.7-0.8 GB per process is the PyTorch/CUDA runtime that both paths load, not the models (engines 23-61 MB).
+- Live loop with RF-DETR-Nano (`person_distance.py --engine rfdetr/RFDETRNano.engine --all-classes --owner ...`, Ultralytics ByteTrack fed by `rfdetr_trt.py` boxes): 16.8 fps end-to-end over 30 s with SCRFD + ArcFace every 3rd frame, detector + tracker 20.2 ms median, 0 frame timeouts. The owner was bound to track #1 while a second person (face score 0.11) kept a separate track.
