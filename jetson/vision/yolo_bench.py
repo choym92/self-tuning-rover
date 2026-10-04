@@ -8,7 +8,7 @@ GPU memory seen by torch. Compare with Ultralytics' published Orin Nano Super fi
 
 Run (Jetson):
   docker run --rm --runtime nvidia --ipc host -v ~/yolo:/work -w /work \
-    ultralytics/ultralytics:latest-jetson-jetpack6 python3 yolo_bench.py [yolo26n|yolo26s|...]
+    ultralytics/ultralytics:latest-jetson-jetpack6 python3 yolo_bench.py [yolo26n|yolo26s|yolo26s-pose|...]
 """
 import os
 import time
@@ -21,6 +21,7 @@ import sys
 NAME = sys.argv[1] if len(sys.argv) > 1 else "yolo26s"
 WEIGHTS = f"{NAME}.pt"
 ENGINE = f"{NAME}.engine"
+TASK = "pose" if NAME.endswith("-pose") else "detect"
 IMAGE = "https://ultralytics.com/images/bus.jpg"
 N = 200
 
@@ -30,7 +31,7 @@ if not os.path.exists(ENGINE):
     print(f"export to TensorRT FP16 took {time.time() - t:.0f} s")
 
 for name, path in (("pytorch", WEIGHTS), ("tensorrt_fp16", ENGINE)):
-    model = YOLO(path, task="detect")
+    model = YOLO(path, task=TASK)
     for _ in range(10):  # warm-up
         model(IMAGE, imgsz=640, device=0, verbose=False)
     lat = []

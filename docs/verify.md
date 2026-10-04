@@ -287,3 +287,14 @@ YuNet runs on the CPU through OpenCV, so it loads the CPU and leaves the GPU alm
 - Owner label kept while the owner faced away from the camera (face not visible), confirmed live by Paul.
 - A/B, 40 s each, GPU locked at 1020 MHz, owner in view, no viewer connected: previous detect-only loop (`model()`, conf 0.4) 18.7 fps, YOLO stage 15.2 ms; with ByteTrack (person class) 16.8 fps, 18.1 ms; with ByteTrack and all 80 classes 16.5 fps, 18.6 ms. Tracking costs about 3 ms per frame (~10% fps). The live view's JPEG encoding, done only while a viewer is connected, lowers it further (about 15 fps shown on screen).
 - Fixed after Paul's live test: when no track was active, Ultralytics returned the raw conf >= 0.1 detections, which showed as untracked `#None` boxes; only tracked boxes are shown now.
+
+### YOLO26s-pose vs YOLO26s detect, TensorRT FP16 (2026-10-03, Jetson, GPU locked at 1020 MHz)
+
+`yolo_bench.py yolo26s-pose` then `yolo_bench.py yolo26s`, bus.jpg, 200 runs, model forward only. Export to TensorRT took 561 s.
+
+| Model | TensorRT FP16 median | Engine | Persons in bus.jpg |
+|---|---|---|---|
+| yolo26s (detect, 80 classes) | 6.18 ms (162 fps) | 22.2 MB | 4 |
+| yolo26s-pose (person + 17 keypoints) | 6.60 ms (151 fps) | 24.5 MB | 4 |
+
+The pose model finds the same people for about 0.4 ms more per frame, so in person-only mode it can replace the detector instead of being added next to it. Not yet measured in the live loop.
