@@ -298,3 +298,20 @@ YuNet runs on the CPU through OpenCV, so it loads the CPU and leaves the GPU alm
 | yolo26s-pose (person + 17 keypoints) | 6.60 ms (151 fps) | 24.5 MB | 4 |
 
 The pose model finds the same people for about 0.4 ms more per frame, so in person-only mode it can replace the detector instead of being added next to it. Live loop (`person_distance.py --engine yolo26s-pose.engine`, tracking + owner, 40 s, no viewer): 16.9 fps, YOLO + tracker 18.6 ms, the same as the detect model (16.8 fps); the skeleton is drawn in the live view.
+
+### RF-DETR vs YOLO26s on the Jetson, same TensorRT path (2026-10-03, GPU locked at 1020 MHz)
+
+`rfdetr_bench.py`: rfdetr 1.11.1 COCO checkpoints exported to ONNX at each model's native resolution; every ONNX (RF-DETR and the Ultralytics YOLO exports) built and timed with the same `trtexec --fp16 --useCudaGraph` command. Times are the median GPU compute of the model forward only (no pre/post-processing). COCO AP is the publishers' figure (RF-DETR README, Ultralytics docs), not measured here.
+
+| Model | Input px | Jetson TRT FP16 | Engine | COCO AP (published) | License |
+|---|---|---|---|---|---|
+| YOLO26s | 640 | 6.01 ms | 22.9 MB | 48.6 box | AGPL-3.0 |
+| YOLO26s-pose | 640 | 6.43 ms | 24.8 MB | (pose) | AGPL-3.0 |
+| RF-DETR-Nano | 384 | 5.77 ms | 59.1 MB | 48.4 box | Apache 2.0 |
+| RF-DETR-Small | 512 | 10.30 ms | 60.9 MB | 53.0 box | Apache 2.0 |
+| RF-DETR-Seg-Nano | 312 | 9.05 ms | 64.9 MB | 40.3 mask | Apache 2.0 |
+| RF-DETR-Seg-Small | 384 | 12.74 ms | 65.2 MB | (mask, not checked) | Apache 2.0 |
+
+- Same objects found by all five models at confidence 0.5 on bus.jpg (4 persons, 1 bus) and on one room frame (1 person), so the local check does not separate them; the accuracy difference rests on the published COCO numbers.
+- RF-DETR-Small vs YOLO26s: 1.4x the GPU time on a T4 (published), 1.7x on this Jetson.
+- The first benchmark run printed 0 persons for every RF-DETR model: RF-DETR returns COCO category ids (person = 1), which the script mapped through a 0-indexed list. Fixed in the script; the label check above uses the corrected mapping.
