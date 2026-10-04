@@ -139,7 +139,8 @@ try:
         d = time.perf_counter()
 
         people = []
-        ids = res.boxes.id.int().cpu().tolist() if res.boxes.id is not None else [None] * len(res.boxes)
+        # With no active track Ultralytics leaves the raw conf>=0.1 detections in res; show tracked boxes only.
+        ids = res.boxes.id.int().cpu().tolist() if res.boxes.id is not None else []
         for (x1, y1, x2, y2), conf, cls, tid in zip(res.boxes.xyxy.cpu().numpy(), res.boxes.conf.cpu().numpy(),
                                                     res.boxes.cls.cpu().numpy(), ids):
             w, h = x2 - x1, y2 - y1
