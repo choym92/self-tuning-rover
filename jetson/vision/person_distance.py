@@ -46,6 +46,8 @@ ap.add_argument("--all-classes", action="store_true", help="detect all 80 COCO c
 ap.add_argument("--owner", default="", help="owner file from face_enroll_guided.py, e.g. owner/paul_guided.npz")
 ap.add_argument("--face-detector", choices=["scrfd", "yunet"], default="scrfd")
 ap.add_argument("--face-every", type=int, default=3, help="run face recognition every N frames")
+ap.add_argument("--face-backend", choices=["trt", "ort"], default="trt",
+                help="SCRFD + ArcFace as TensorRT FP16 engines (models/*.fp16.engine) or onnxruntime")
 ap.add_argument("--stream-port", type=int, default=0,
                 help="if > 0, serve a live MJPEG view (color with boxes | depth) on this port")
 args = ap.parse_args()
@@ -90,9 +92,9 @@ if args.stream_port:
 fid = None
 if args.owner:
     from face_owner import FaceID
-    fid = FaceID("models", detector=args.face_detector)
+    fid = FaceID("models", detector=args.face_detector, backend=args.face_backend)
     fid.load_owner(args.owner)
-    print(f"face detector {args.face_detector}, ArcFace threshold {fid.threshold}", flush=True)
+    print(f"face detector {args.face_detector} ({args.face_backend}), ArcFace threshold {fid.threshold}", flush=True)
     print(f"owner: {fid.owner_name} ({len(fid.owner_samples)} samples)", flush=True)
 OWNER_HITS = 2         # consecutive face checks matching the owner on one track before it is bound
 REVERIFY_MISSES = 3    # face checks finding a non-owner face on the owner track before it is released

@@ -8,6 +8,9 @@ people are compared in memory and discarded.
 Models (in models/, not in the repository):
   det_10g.onnx, w600k_r50.onnx    InsightFace buffalo_l, non-commercial research only
   face_detection_yunet_2023mar    OpenCV Zoo, MIT
+  det_10g.fp16.engine, w600k_r50.fp16.engine   TensorRT FP16 builds of the two ONNX files (backend="trt"):
+    trtexec --onnx=models/det_10g.onnx --fp16 --shapes=input.1:1x3x640x640 --saveEngine=models/det_10g.fp16.engine
+    trtexec --onnx=models/w600k_r50.onnx --fp16 --shapes=input.1:1x3x112x112 --saveEngine=models/w600k_r50.fp16.engine
 
 Library use (person_distance.py --owner owner/paul_guided.npz):
   fid = FaceID("models", detector="scrfd"); fid.load_owner("owner/paul_guided.npz"); fid.match(bgr_image)
@@ -28,16 +31,26 @@ ARC_TEMPLATE = np.array([[38.2946, 51.6963], [73.5318, 51.5014], [56.0252, 71.73
 
 
 SCRFD_FILE = "det_10g.onnx"  # InsightFace buffalo_l face detector, non-commercial research only
+ENGINE = {SCRFD_FILE: "det_10g.fp16.engine", ARCFACE: "w600k_r50.fp16.engine"}
+
+
+def runner(path, backend):
+    """Callable blob -> list of outputs, with onnxruntime (CUDA) or the TensorRT engine next to the ONNX file."""
+    if backend == "trt":
+        from trt_engine import TRTEngine
+        return TRTEngine(os.path.join(os.path.dirname(path), ENGINE[os.path.basename(path)]))
+    import onnxruntime as ort
+    sess = ort.InferenceSession(path, providers=["CUDAExecutionProvider", "CPUExecutionProvider"])
+    inp = sess.get_inputs()[0].name
+    return lambda blob: sess.run(None, {inp: blob})
 
 
 class SCRFD:
     """Minimal SCRFD decoder for det_10g.onnx (3 strides, 2 anchors per location, 5 landmarks).
     Returns rows in YuNet's layout: x, y, w, h, 5 landmarks (x, y), score."""
 
-    def __init__(self, path, size=640, score=0.5, nms=0.4):
-        import onnxruntime as ort
-        self.sess = ort.InferenceSession(path, providers=["CUDAExecutionProvider", "CPUExecutionProvider"])
-        self.inp = self.sess.get_inputs()[0].name
+    def __init__(self, path, size=640, score=0.5, nms=0.4, backend="ort"):
+        self.run = runner(path, backend)
         self.size, self.score, self.nms = size, score, nms
         self.strides, self.na = (8, 16, 32), 2
         self.centers = {}
@@ -57,7 +70,7 @@ class SCRFD:
         canvas = np.zeros((self.size, self.size, 3), np.uint8)
         canvas[:nh, :nw] = cv2.resize(img, (nw, nh))
         blob = cv2.dnn.blobFromImage(canvas, 1.0 / 128, (self.size, self.size), (127.5, 127.5, 127.5), swapRB=True)
-        outs = self.sess.run(None, {self.inp: blob})
+        outs = self.run(blob)
         boxes, scores, kpss = [], [], []
         for i, s in enumerate(self.strides):
             sc, bb, kp = outs[i].reshape(-1), outs[i + 3].reshape(-1, 4) * s, outs[i + 6].reshape(-1, 10) * s
@@ -77,23 +90,21 @@ class SCRFD:
 
 
 class FaceID:
-    def __init__(self, model_dir="models", score=0.7, detector="scrfd", share_from=None):
+    def __init__(self, model_dir="models", score=0.7, detector="scrfd", share_from=None, backend="ort"):
         """detector: "scrfd" (InsightFace, GPU, default) or "yunet" (OpenCV Zoo, MIT, CPU).
-        share_from: another FaceID whose ArcFace session to reuse (saves GPU memory)."""
+        share_from: another FaceID whose ArcFace session to reuse (saves GPU memory).
+        backend: "ort" (onnxruntime CUDA) or "trt" (TensorRT FP16 engines) for SCRFD and ArcFace."""
         self.detector = detector
         self.threshold = THRESHOLD
         if detector == "scrfd":
-            self.scrfd = SCRFD(os.path.join(model_dir, SCRFD_FILE), score=0.5)
+            self.scrfd = SCRFD(os.path.join(model_dir, SCRFD_FILE), score=0.5, backend=backend)
         else:
             self.det = cv2.FaceDetectorYN.create(os.path.join(model_dir, YUNET), "", (320, 320), score, 0.3, 5000)
         if share_from is not None:
-            self.sess, self.inp = share_from.sess, share_from.inp
+            self.arcface = share_from.arcface
             self.owner_name, self.owner = None, None
             return
-        import onnxruntime as ort
-        self.sess = ort.InferenceSession(os.path.join(model_dir, ARCFACE),
-                                         providers=["CUDAExecutionProvider", "CPUExecutionProvider"])
-        self.inp = self.sess.get_inputs()[0].name
+        self.arcface = runner(os.path.join(model_dir, ARCFACE), backend)
         self.owner_name = None
         self.owner = None  # unit-norm mean embedding
 
@@ -114,7 +125,7 @@ class FaceID:
             return None
         crop = cv2.warpAffine(img, M, (112, 112), borderValue=0.0)
         blob = cv2.dnn.blobFromImage(crop, 1.0 / 127.5, (112, 112), (127.5, 127.5, 127.5), swapRB=True)
-        f = self.sess.run(None, {self.inp: blob})[0].flatten().astype(np.float32)
+        f = self.arcface(blob)[0].flatten().astype(np.float32)
         return f / (np.linalg.norm(f) + 1e-9)
 
     def load_owner(self, path):

@@ -362,3 +362,17 @@ Share of frames detected at confidence >= 0.5 (>= 0.3), where the models disagre
 
 All three keep up with the 30 fps camera. YOLO26s and RF-DETR-Nano use the same GPU share and RAM within about 100 MB (the two RAM measures disagree on the order, so the difference is within measurement noise); RF-DETR-Small needs almost twice the GPU. About 0.7-0.8 GB per process is the PyTorch/CUDA runtime that both paths load, not the models (engines 23-61 MB).
 - Live loop with RF-DETR-Nano (`person_distance.py --engine rfdetr/RFDETRNano.engine --all-classes --owner ...`, Ultralytics ByteTrack fed by `rfdetr_trt.py` boxes): 16.8 fps end-to-end over 30 s with SCRFD + ArcFace every 3rd frame, detector + tracker 20.2 ms median, 0 frame timeouts. The owner was bound to track #1 while a second person (face score 0.11) kept a separate track.
+
+### Owner recognition on TensorRT: SCRFD + ArcFace FP16 engines vs onnxruntime (2026-10-03, Jetson, GPU locked at 1020 MHz)
+
+Engines built with `trtexec --fp16` (SCRFD det_10g at 1x3x640x640: 5.3 ms GPU compute, build 78 s; ArcFace w600k_r50 at 1x3x112x112: 3.1 ms, build 88 s) and run through `trt_engine.py` (`FaceID(backend="trt")`).
+
+- Same 20 live frames through both backends: 20 faces each, box IoU >= 0.996, landmark difference <= 0.12 px, embedding cosine ORT vs TRT 1.0000 (min), owner score difference <= 0.0007. SCRFD detect median 32.8 ms ORT vs 13.0 ms TRT; ArcFace align + embed 19.0 ms vs 4.5 ms.
+- Live loop (`person_distance.py --engine rfdetr/RFDETRNano.engine --owner ...`, person class, faces every 3rd frame, 40 s each, tegrastats over 20 s):
+
+| Face backend | fps end-to-end | Face-check frames (post p90) | GPU (GR3D) | System RAM |
+|---|---|---|---|---|
+| onnxruntime CUDA | 21.0 | 54.6 ms | 53% | 4528 MB |
+| TensorRT FP16 | 28.7 | 20.3 ms | 31% | 3724 MB |
+
+TensorRT is now the default (`--face-backend trt`). Dropping onnxruntime's CUDA session also freed about 0.8 GB of RAM.
