@@ -264,3 +264,15 @@ Findings: detection rates are identical; with matched galleries SCRFD scores equ
 - Added 12 close shots with `face_enroll_guided.py --plan close --append` (0.41–0.75 m measured; straight, ±30°, up, down, both profiles; all 12 found by both detectors). Gallery now 34 embeddings per detector; previous gallery kept as `paul_guided.before-close.npz` on the Jetson.
 - Owner alone at ~0.8 m right afterwards (20 s): score min 0.85, median 0.86, max 0.88 (before: 0.62–0.67 at similar distance). Not yet re-checked: the brother's score with the larger gallery, and recognition on another day (lighting, clothes, glasses).
 
+### Cost of owner recognition in the live loop (2026-10-03, clocks locked, person class only, owner in view)
+
+`person_distance.py`, 30 s per configuration, tegrastats sampled for 10 s while running:
+
+| Configuration | GPU (GR3D) | CPU per core | RAM | End-to-end |
+|---|---|---|---|---|
+| YOLO26s only | 22% | 11% | 3.06 GB | 23.7 fps |
+| + YuNet (CPU) + ArcFace (GPU) | 24% | 47% | 3.80 GB | 14.1 fps |
+| + SCRFD (GPU) + ArcFace (GPU) | 46% | 54% | 4.09 GB | 17.1 fps |
+
+YuNet runs on the CPU through OpenCV, so it loads the CPU and leaves the GPU almost unchanged; SCRFD moves that work to the GPU. Either way the frame rate drops because face detection + ArcFace run synchronously inside the capture loop (every 3rd frame, full 848x480 frame). Planned fixes: detect faces only inside person boxes, run recognition in a separate thread, and re-check identity only occasionally once a tracked person is confirmed.
+
