@@ -336,3 +336,16 @@ Share of frames detected at confidence >= 0.5 (>= 0.3), where the models disagre
 - RF-DETR found chairs that YOLO26s almost never reported; YOLO26s reported laptops more often in two desk scenes.
 - RF-DETR produced more low-confidence (0.3-0.5) guesses that look wrong in the inspected frames (remote, cell phone on a keypad, book for the Jetson box); at the 0.5 threshold these mostly disappear.
 - Not covered: people at 3-5 m (RF-DETR-Nano sees a 384 px image vs 640 px for YOLO26s), other rooms and lighting.
+
+### Person detection by distance: YOLO26s vs RF-DETR-Nano vs RF-DETR-Small (2026-10-03, Paul's room)
+
+`detector_distance.py`, 90 in-band frames per segment, all three as TensorRT FP16. The room allows about 3 m at most. The first run measured distance from a fixed strip at the image centre, which read the wall whenever Paul stood off-centre (the annotated frame shows Paul right of centre), so its "3 m" segments were most likely about 2 m (INFERENCE: the person box height, 309-364 px, matches about 2 m). Read the results as about 1 m and about 2 m:
+
+| Segment as labelled (likely real distance) | YOLO26s | RF-DETR-Nano | RF-DETR-Small |
+|---|---|---|---|
+| 1 m facing (1 m) | 100%, conf 0.95 | 100%, 0.95 | 100%, 0.96 |
+| 3 m facing (~2 m) | 100%, 0.94 | 100%, 0.95 | 100%, 0.94 |
+| 3 m sideways (~2 m) | 100%, 0.90 | 100%, 0.92 | 100%, 0.93 |
+| 3 m back turned (~2 m) | 100%, 0.93 | 100%, 0.94 | 100%, 0.94 |
+
+(% of frames with a person at confidence >= 0.5; all were also 100% at >= 0.3.) No difference between the models at 1-2 m. The script now takes the distance from the most confident person box of any model (checked live: 0.54-0.56 m for Paul seated at the desk, matching the live loop); a rerun recorded no frames because Paul was seated outside every band. People beyond 3 m are not yet tested.
