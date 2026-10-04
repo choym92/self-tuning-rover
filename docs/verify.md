@@ -297,4 +297,4 @@ YuNet runs on the CPU through OpenCV, so it loads the CPU and leaves the GPU alm
 | yolo26s (detect, 80 classes) | 6.18 ms (162 fps) | 22.2 MB | 4 |
 | yolo26s-pose (person + 17 keypoints) | 6.60 ms (151 fps) | 24.5 MB | 4 |
 
-The pose model finds the same people for about 0.4 ms more per frame, so in person-only mode it can replace the detector instead of being added next to it. Not yet measured in the live loop.
+The pose model finds the same people for about 0.4 ms more per frame, so in person-only mode it can replace the detector instead of being added next to it. Live loop (`person_distance.py --engine yolo26s-pose.engine`, tracking + owner, 40 s, no viewer): 16.9 fps, YOLO + tracker 18.6 ms, the same as the detect model (16.8 fps); the skeleton is drawn in the live view.

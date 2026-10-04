@@ -16,7 +16,7 @@ Run (Jetson), mounting our RSUSB librealsense build and the USB devices into the
     -v /home/paulcho/yolo:/work -w /work \
     -v /home/paulcho/src/librealsense/build/Release:/rs:ro -e PYTHONPATH=/rs:/work/pylib -e LD_LIBRARY_PATH=/rs \
     -v /dev/bus/usb:/dev/bus/usb --device-cgroup-rule='c 189:* rmw' \
-    ultralytics/ultralytics:latest-jetson-jetpack6 python3 person_distance.py \
+    ultralytics/ultralytics:latest-jetson-jetpack6 python3 person_distance.py --engine yolo26s-pose.engine \
     --owner owner/paul_guided.npz --stream-port 8090 --seconds 600
 The view port is published on the Jetson's localhost only; on the Mac use an SSH tunnel
 (ssh -N -L 8090:127.0.0.1:8090 paulcho@192.168.1.234) and open http://localhost:8090.
@@ -99,7 +99,13 @@ owner_tid, owner_sim, owner_last, owner_misses = None, 0.0, 0.0, 0
 hits = {}              # track id -> consecutive owner-face matches
 face_scores = []  # (x-centre px, similarity) of every face in the last face check, for the log
 
-model = YOLO(args.engine, task="detect")
+POSE = "pose" in args.engine  # e.g. yolo26s-pose.engine: person boxes + 17 COCO keypoints
+model = YOLO(args.engine, task="pose" if POSE else "detect")
+# COCO keypoints: 0 nose, 1-2 eyes, 3-4 ears, 5-6 shoulders, 7-8 elbows, 9-10 wrists, 11-12 hips, 13-14 knees,
+# 15-16 ankles (odd = person's left, even = person's right)
+SKELETON = [(5, 7), (7, 9), (6, 8), (8, 10), (5, 6), (5, 11), (6, 12), (11, 12), (11, 13), (13, 15),
+            (12, 14), (14, 16), (0, 1), (0, 2), (1, 3), (2, 4)]
+KP_CONF = 0.5
 PERSON = [k for k, v in model.names.items() if v == "person"][0] if hasattr(model, "names") and model.names else 0
 
 W, H, FPS = 848, 480, 30
@@ -141,8 +147,9 @@ try:
         people = []
         # With no active track Ultralytics leaves the raw conf>=0.1 detections in res; show tracked boxes only.
         ids = res.boxes.id.int().cpu().tolist() if res.boxes.id is not None else []
-        for (x1, y1, x2, y2), conf, cls, tid in zip(res.boxes.xyxy.cpu().numpy(), res.boxes.conf.cpu().numpy(),
-                                                    res.boxes.cls.cpu().numpy(), ids):
+        kps = res.keypoints.data.cpu().numpy() if POSE else [None] * len(ids)  # (x, y, confidence) per keypoint
+        for (x1, y1, x2, y2), conf, cls, tid, kp in zip(res.boxes.xyxy.cpu().numpy(), res.boxes.conf.cpu().numpy(),
+                                                        res.boxes.cls.cpu().numpy(), ids, kps):
             w, h = x2 - x1, y2 - y1
             cx1, cx2 = int(x1 + 0.3 * w), int(x2 - 0.3 * w)
             cy1, cy2 = int(y1 + 0.3 * h), int(y2 - 0.3 * h)
@@ -152,7 +159,7 @@ try:
             u = (x1 + x2) / 2
             bearing = math.degrees(math.atan2(u - intr.ppx, intr.fx))
             people.append((dist, bearing, float(conf), (int(x1), int(y1), int(x2), int(y2)),
-                           res.names[int(cls)], tid))
+                           res.names[int(cls)], tid, kp))
         now = time.time()
         if fid is not None and frames % args.face_every == 0:
             matches = fid.match(img)
@@ -186,9 +193,17 @@ try:
 
         if args.stream_port and clients[0]:
             view = img.copy()
-            for dist, bearing, conf, (x1, y1, x2, y2), name, tid in people:
+            for dist, bearing, conf, (x1, y1, x2, y2), name, tid, kp in people:
                 color = (0, 215, 255) if "(owner)" in name else (0, 255, 0)
                 cv2.rectangle(view, (x1, y1), (x2, y2), color, 3 if "(owner)" in name else 2)
+                if kp is not None:
+                    for i, j in SKELETON:
+                        if kp[i, 2] > KP_CONF and kp[j, 2] > KP_CONF:
+                            cv2.line(view, (int(kp[i, 0]), int(kp[i, 1])), (int(kp[j, 0]), int(kp[j, 1])), (255, 200, 0), 2)
+                    for k, (x, y, c) in enumerate(kp):
+                        if c > KP_CONF:  # wrists larger and magenta: gestures will use them
+                            cv2.circle(view, (int(x), int(y)), 7 if k in (9, 10) else 3,
+                                       (255, 0, 255) if k in (9, 10) else (255, 255, 255), -1)
                 cv2.putText(view, f"#{tid} {name} {conf:.0%} {dist:.2f} m {bearing:+.0f} deg", (x1, max(y1 - 8, 15)),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
             dvis = cv2.applyColorMap(cv2.convertScaleAbs(np.clip(depth, 0, 4.0), alpha=255 / 4.0), cv2.COLORMAP_TURBO)
@@ -212,7 +227,7 @@ try:
             next_print = time.time() + 1
 
         if args.out and people and not saved and time.time() - t0 > 2:
-            for dist, bearing, conf, (x1, y1, x2, y2), name, tid in people:
+            for dist, bearing, conf, (x1, y1, x2, y2), name, tid, kp in people:
                 cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
                 cv2.putText(img, f"{dist:.2f} m {bearing:+.0f} deg", (x1, max(y1 - 8, 15)),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
