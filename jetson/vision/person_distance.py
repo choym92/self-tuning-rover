@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """Live person detection + tracking + distance + bearing with the D436 and YOLO26s or RF-DETR (TensorRT FP16).
 
---engine yolo26s.engine (default) runs through Ultralytics; --engine rfdetr/RFDETRNano.engine runs
-through rfdetr_trt.py, with the same Ultralytics ByteTrack fed by its boxes.
-Boxes are tracked with ByteTrack, so each person keeps an ID (#n) across frames.
+--engine rfdetr/RFDETRNano.engine (default, built by rfdetr_bench.py) runs through rfdetr_trt.py with
+the Ultralytics ByteTrack fed by its boxes; --engine yolo26s.engine runs through Ultralytics model.track.
+Boxes are tracked with ByteTrack (bytetrack_rover.yaml), so each person keeps an ID (#n) across frames.
 With --owner, the owner is bound to a track ID: the owner's face must match on the same track in
 OWNER_HITS consecutive face checks; the binding is released when the track is gone for LOST_RELEASE s
-or when REVERIFY_MISSES face checks find a non-owner face on that track.
+or when REVERIFY_MISSES face checks find a clearly different face (score < MISS_BELOW) on that track;
+scores between MISS_BELOW and the threshold (side views, frame edge) neither confirm nor release. Faces are checked every
+--face-every frames until the owner is bound; afterwards only every --reverify seconds, except while
+the owner's box overlaps another person's box or the owner's track is missing.
 
 For every box: distance = median of valid depth pixels in the central 40% of the box
 (aligned to color), bearing = horizontal angle from the color camera's optical axis
@@ -18,7 +21,7 @@ Run (Jetson), mounting our RSUSB librealsense build and the USB devices into the
     -v /home/paulcho/yolo:/work -w /work \
     -v /home/paulcho/src/librealsense/build/Release:/rs:ro -e PYTHONPATH=/rs:/work/pylib -e LD_LIBRARY_PATH=/rs \
     -v /dev/bus/usb:/dev/bus/usb --device-cgroup-rule='c 189:* rmw' \
-    ultralytics/ultralytics:latest-jetson-jetpack6 python3 person_distance.py --engine yolo26s-pose.engine \
+    ultralytics/ultralytics:latest-jetson-jetpack6 python3 person_distance.py --all-classes \
     --owner owner/paul_guided.npz --stream-port 8090 --seconds 600
 The view port is published on the Jetson's localhost only; on the Mac use an SSH tunnel
 (ssh -N -L 8090:127.0.0.1:8090 paulcho@192.168.1.234) and open http://localhost:8090.
@@ -37,15 +40,17 @@ from ultralytics import YOLO
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--seconds", type=float, default=20)
-ap.add_argument("--engine", default="yolo26s.engine")
+ap.add_argument("--engine", default="rfdetr/RFDETRNano.engine")
 ap.add_argument("--conf", type=float, default=0.1,
                 help="detector threshold; low-score boxes feed ByteTrack's second association stage")
-ap.add_argument("--tracker", default="bytetrack.yaml", help="Ultralytics tracker config (bytetrack.yaml, botsort.yaml)")
+ap.add_argument("--tracker", default="bytetrack_rover.yaml", help="Ultralytics tracker config")
 ap.add_argument("--out", default="", help="save one annotated frame here (contains faces; never commit it)")
 ap.add_argument("--all-classes", action="store_true", help="detect all 80 COCO classes, not only person")
 ap.add_argument("--owner", default="", help="owner file from face_enroll_guided.py, e.g. owner/paul_guided.npz")
 ap.add_argument("--face-detector", choices=["scrfd", "yunet"], default="scrfd")
-ap.add_argument("--face-every", type=int, default=3, help="run face recognition every N frames")
+ap.add_argument("--face-every", type=int, default=3, help="run face recognition every N frames while searching")
+ap.add_argument("--reverify", type=float, default=1.0,
+                help="seconds between face checks once the owner is bound and alone (<= 0: every --face-every frames)")
 ap.add_argument("--face-backend", choices=["trt", "ort"], default="trt",
                 help="SCRFD + ArcFace as TensorRT FP16 engines (models/*.fp16.engine) or onnxruntime")
 ap.add_argument("--stream-port", type=int, default=0,
@@ -97,9 +102,11 @@ if args.owner:
     print(f"face detector {args.face_detector} ({args.face_backend}), ArcFace threshold {fid.threshold}", flush=True)
     print(f"owner: {fid.owner_name} ({len(fid.owner_samples)} samples)", flush=True)
 OWNER_HITS = 2         # consecutive face checks matching the owner on one track before it is bound
-REVERIFY_MISSES = 3    # face checks finding a non-owner face on the owner track before it is released
+REVERIFY_MISSES = 3    # face checks finding a clearly different face on the owner track before it is released
+MISS_BELOW = 0.25      # brother's median score 0.17-0.24 (docs/verify.md); the owner at the frame edge scored 0.35
 LOST_RELEASE = 2.0     # seconds the owner track may be missing before it is released
 owner_tid, owner_sim, owner_last, owner_misses = None, 0.0, 0.0, 0
+last_face = 0.0
 hits = {}              # track id -> consecutive owner-face matches
 face_scores = []  # (x-centre px, similarity) of every face in the last face check, for the log
 
@@ -189,7 +196,16 @@ try:
             people.append((dist, bearing, float(conf), (int(x1), int(y1), int(x2), int(y2)),
                            NAMES[int(cls)], tid, kp))
         now = time.time()
-        if fid is not None and frames % args.face_every == 0:
+        owner_p = next((p for p in people if p[5] == owner_tid), None) if owner_tid is not None else None
+        crowded = owner_p is not None and any(
+            p is not owner_p and p[4] == "person" and min(p[3][2], owner_p[3][2]) > max(p[3][0], owner_p[3][0])
+            and min(p[3][3], owner_p[3][3]) > max(p[3][1], owner_p[3][1]) for p in people)
+        if owner_p is None or crowded or args.reverify <= 0:
+            face_due = frames % args.face_every == 0
+        else:
+            face_due = now - last_face >= args.reverify
+        if fid is not None and face_due:
+            last_face = now
             matches = fid.match(img)
             face_scores = [(int(f[0] + f[2] / 2), round(sim, 2)) for f, sim, _ in matches]
 
@@ -206,8 +222,8 @@ try:
             hits = {t: hits.get(t, 0) + 1} if t is not None else {}
             if t is not None and (t == owner_tid or hits[t] >= OWNER_HITS):
                 owner_tid, owner_sim, owner_last, owner_misses = t, best[1], now, 0
-            elif owner_tid is not None and any(track_of(f) == owner_tid for f, _, _ in matches):
-                owner_misses += 1  # a face on the owner track that is not the owner
+            elif owner_tid is not None and any(track_of(f) == owner_tid and sim < MISS_BELOW for f, sim, _ in matches):
+                owner_misses += 1  # a clearly different face on the owner track
                 if owner_misses >= REVERIFY_MISSES:
                     owner_tid = None
         if owner_tid is not None:

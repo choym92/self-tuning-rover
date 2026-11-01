@@ -68,4 +68,4 @@ direction belongs in `docs/STATUS.md`.
 
 ## Hardware
 
-Jetson Orin Nano Super Developer Kit (8 GB), T-FORCE G50 512 GB NVMe, SanDisk 64 GB microSD (fallback system), Inland DP→HDMI adapter. Ordered: RealSense D436. Planned: Waveshare UGV Rover PT Jetson Orin AI Kit (Acce), RTL8822CE WiFi card (AW-CB375NF), 18650 cells. Details and prices in `docs/build-spec.md`.
+Jetson Orin Nano Super Developer Kit (8 GB), T-FORCE G50 512 GB NVMe, SanDisk 64 GB microSD (fallback system), Inland DP→HDMI adapter. RealSense D436 (first live check 2026-10-03). Waveshare UGV Rover PT Jetson Orin AI Kit (Acce): ordered 2026-10-17, arrived and assembled 2026-10-31. 3 × Molicel P30B 18650 cells: ordered 2026-10-31. The devkit's own RTL8822CE WiFi card is used (no separate WiFi purchase). Details and prices in `docs/build-spec.md`.

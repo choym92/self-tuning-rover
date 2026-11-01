@@ -18,6 +18,9 @@ Prices as of 2026-09-22/24. Reasons in [decisions.md](decisions.md). Only the Mi
 | Item | Where | Price seen | Status |
 |---|---|---|---|
 | **RealSense D436** (depth + IMU + global-shutter RGB) | store.realsenseai.com | $354.00 + 12% tariff surcharge $42.48 + FedEx 2 Day $25.30 = **$421.78** (no sales tax charged) | **Ordered 2026-09-24** (returns only if unopened) |
+| **Waveshare UGV Rover PT Jetson Orin AI Kit Acce** (SKU 27772; no Jetson; 6-wheel 4WD, encoders, ESP32 driver, pan-tilt, 5 MP camera, audio board, 3S 18650 UPS) | waveshare.com | $339.99 + freight $133.75 ("Express Air-DDP" option at checkout; the invoice states delivery terms DAP) = **$473.74** | Ordered 2026-10-17; **arrived 2026-10-31**, Jetson assembled into it the same day (setup-log.md). Reasons and measurements: decisions.md, verify.md |
+| **Molicel P30B** 18650 3000 mAh 30 A, unprotected flat-top × 3 (not included in the kit; Waveshare asks ≥ 2200 mAh, ≥ 4C) | 18650batterystore.com (an Amazon search on 2026-10-31 showed no genuine Molicel listing) | $8.99 × 3 = $26.97 + shipping $7.41 + tax $1.89 = **$36.27** (6+ cells: $8.00 each) | **Ordered 2026-10-31** (standard shipping, 3-4 business days). Chosen over P28A (2800 mAh, $5.99) for capacity; M35A rejected (10 A is below 4C for 3500 mAh). A second set of 3 later only if runtime is short; never mix cells across sets |
+| 18650 charger (e.g. XTAR VC4SL) | to be chosen | about $22-27 on an undated retailer page | Only for charging a spare set outside the robot; cells in the robot charge from the kit's 12.6 V charger |
 | RealSense D435if (IMU + IR-pass filter) | store.realsenseai.com | $354.00 | Alternative — was the pick before the D436 check |
 | RealSense D435i (IMU) | store.realsenseai.com | $334.00 | Alternative — most community precedent, rolling-shutter RGB |
 | ~~RealSense D435i on Amazon~~ | Amazon | $409.99 used / $499–519 new | Dropped — the official store is cheaper |

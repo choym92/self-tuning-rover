@@ -80,8 +80,12 @@ Next steps:
   Jetson over USB 3 on 2026-10-03 (`docs/verify.md`). 10-minute IMU soak with video
   passed (0.006% gyro samples missing, 0 video drops). Still to do: depth accuracy
   against a tape measure. The Mac is not a usable live host.
-- Waveshare UGV Rover PT Acce: selected but repository status says not ordered.
-  Never promote the hypothetical assembled-rover discussion to a purchase fact.
+- Waveshare UGV Rover PT Acce: arrived 2026-10-31; the Jetson is assembled into it
+  but nothing is powered yet (`docs/setup-log.md`). The D436 is on the pan-tilt head
+  (`docs/decisions.md`). Cells: 3 × Molicel P30B, ordered 2026-10-31
+  (`docs/build-spec.md`). First power-on checks: battery LED off (polarity), charger
+  once to wake the UPS, WiFi signal (the rover antenna connectors came off easily),
+  T:1001 feedback on `/dev/ttyTHS1`, wheel direction with T:11.
 - Final microphone: not purchased. Test the Waveshare audio board first; the
   planned fallback is a Seeed reSpeaker XVF3800 USB four-mic array.
 

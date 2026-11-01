@@ -376,3 +376,19 @@ Engines built with `trtexec --fp16` (SCRFD det_10g at 1x3x640x640: 5.3 ms GPU co
 | TensorRT FP16 | 28.7 | 20.3 ms | 31% | 3724 MB |
 
 TensorRT is now the default (`--face-backend trt`). Dropping onnxruntime's CUDA session also freed about 0.8 GB of RAM.
+
+## Jetson power draw by workload (2026-10-17, Jetson, MAXN_SUPER, clocks not locked)
+
+Purpose: size the rover battery and charger before buying the Waveshare UGV Rover PT. `tegrastats --interval 1000` on the host; the means cover the steady part of each run (start-up excluded). D436 on USB 3 in every run. Raw logs stayed on the Jetson (`/tmp/ts_*.log`) and in the session scratchpad, not in the repository.
+
+| Workload | VDD_IN mean (max) | VDD_CPU_GPU_CV mean | GPU (GR3D) | CPU per core | System RAM |
+|---|---|---|---|---|---|
+| Idle, 1 min after boot, D436 attached but not streaming | 4.97 W (5.04) | 0.57 W | 0% | ~4% | 1.5 GB |
+| Vision loop: `person_distance.py --all-classes --owner owner/paul_guided.npz --seconds 60` (RF-DETR-Nano default engine, ByteTrack, SCRFD + ArcFace TRT) | 8.66 W (9.13) | 3.22 W | 37% | 91% | 2.9 GB |
+| Gemma 4 E2B Q4_K_M generating back-to-back 256-token answers (`llama-server` with the runbook flags), no vision | 17.47 W (17.58) | 7.20 W | 95% | 1% | 5.9 GB |
+| Vision loop + Gemma generating at the same time | 18.73 W (18.99) | 8.52 W | 97% | 89% | 6.7 GB |
+
+- Gemma alone with the model loaded but idle: 5.0 W, RAM 5.4 GB. The LLM costs power only while it generates.
+- Vision loop alone ran at 11.6 fps (detector median 36 ms, p90 125 ms); with Gemma running it reported 16.2 fps (detector median 43 ms, p90 46 ms). Both are below the 28.7 fps recorded on 2026-10-03 with clocks locked and the person class only; this run used `--all-classes`, unlocked clocks, and kept all six CPU cores near 90% at 1728 MHz. The cause of the lower and run-to-run variable frame rate was not investigated. No owner face was found in either run (the people in view were close and turned away), so face recognition contributed little.
+- Gemma generated at 21.3-21.9 tokens/s while the vision loop ran and 28.0 tokens/s alone (256-token answers).
+- INFERENCE: VDD_IN is the module input rail. The carrier board, the D436 and other USB devices are not included, so the draw at the DC jack is higher by an amount not measured here (a USB-C/DC inline meter would measure it).

@@ -7,3 +7,11 @@ __pycache__/
 *.npz
 owner/
 *.jpg
+
+# personal study material that is not ours to publish
+private/
+
+# local photos and media: the repository is public and the photos show the home
+media/
+
+.DS_Store
