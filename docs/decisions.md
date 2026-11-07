@@ -30,6 +30,7 @@ Contents (search these headings first; open only the section you need):
 - [Console control server owns the UART (2026-11-06, DECIDED)](#console-control-server-owns-the-uart-2026-11-06-decided)
 - [On-robot voice: Supertonic 3, voice M1, for both English and Korean (2026-11-06, DECIDED by Paul)](#on-robot-voice-supertonic-3-voice-m1-for-both-english-and-korean-2026-11-06-decided-by-paul)
 - [The robot's name is Kalman (2026-11-07, DECIDED by Paul)](#the-robots-name-is-kalman-2026-11-07-decided-by-paul)
+- [The rover's LLM runs on the home Mac mini, reached by a rover-side tunnel (2026-11-07, DECIDED by Paul)](#the-rovers-llm-runs-on-the-home-mac-mini-reached-by-a-rover-side-tunnel-2026-11-07-decided-by-paul)
 
 ## AI use: unrestricted — personal project (2026-09-23)
 
@@ -309,3 +310,9 @@ Compared on the Jetson with clocks locked (`docs/verify.md`): YOLO26n 3.6 ms / ~
 - **Kalman** (칼만 in Korean), wake phrase **Hey Kalman** (헤이 칼만). Used in the LLM system prompt and the console header.
 - Why: the first name came from the film, and in the 2026-11-07 microphone test Whisper wrote it differently every time (`Wally`, `Orley`, `Whirly`). Kalman has a clear first consonant, is rare in everyday speech, and is the filter at the centre of this project. Alan and Markov were the other candidates: Alan is common and soft, Markov means a memoryless process. Whether the phrase works as a wake word is still to be measured with the detector.
 - History: the robot was called Wall-E (월리) from 2026-11-06 to 2026-11-07, with `Hey Wall-E` as the wake phrase for part of a day, after the `Hey Jetson` working phrase. Older dated entries keep the old name.
+
+## The rover's LLM runs on the home Mac mini, reached by a rover-side tunnel (2026-11-07, DECIDED by Paul)
+
+- Gemma moved from the Jetson to the always-on Mac mini (M4, 16 GB): same engine and model file, twice the generation speed, identical test-set scores; the Jetson gains about 2.85 GiB for vision (`docs/verify.md`).
+- Transport, Paul's choice of option A: the rover opens a one-way SSH tunnel (`jetson/brainlink/`); the mini's key line allows only a forward to its own `127.0.0.1:8080`, no commands and no reverse forwards. Rejected: the mini dialling the rover (an adversarial review showed the key could run commands, reach the console's e-stop reset and drive, and leave stale listeners) and a LAN port with an API key (the mini's firewall is off and traffic would be cleartext).
+- Consequence: when the Mac mini is off, locked after a restart (FileVault) or unreachable, Kalman cannot talk; motion and safety never depend on it. Which model the mini runs is a separate, later choice.

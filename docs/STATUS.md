@@ -22,7 +22,7 @@ processes and hardware instead of assuming this snapshot is still running.
   (`sudo gpasswd -d paulcho docker`) is still pending, Paul's call.
 - Journald is not persistent and the containers have no restart policy: after a
   reboot, logs of the previous boot are gone and the five containers must be
-  started by hand (`docker start rover-control rover-eyes rover-llm rover-stt rover-tts-st`).
+  started by hand (`docker start rover-control rover-eyes rover-brainlink rover-stt rover-tts-st`).
   Both are open decisions (below).
 
 Read-only live checks:
@@ -74,9 +74,11 @@ samples (`docs/decisions.md`).
 - Open: Korean speech input (Whisper multilingual), sentence-by-sentence TTS
   playback, wake word, a louder external speaker. Design notes:
   `docs/voice-orchestration.md`, `jetson/voice/README.md`.
-- Memory: Gemma + Whisper + Supertonic use about 5.6 GB of 8 GB; vision
-  (RF-DETR-Nano + SCRFD/ArcFace, `docs/verify.md` 2026-10-03) does not fit next to
-  them. Paul's plan: move Gemma to the home Mac mini when vision returns.
+- LLM moved 2026-11-07: Gemma now runs on the home Mac mini (`macmini/`), reached through the
+  rover-side tunnel `rover-brainlink` at the same `127.0.0.1:8080` (`docs/preflight.md`, `docs/decisions.md`).
+  `rover-llm` is stopped, not removed. Jetson memory available rose to about 4.5 GB, enough for vision.
+  If the Mac mini is down, speech generation stops; driving is unaffected. Model candidates for the mini are
+  being researched.
 
 ## Hardware
 
@@ -98,7 +100,7 @@ samples (`docs/decisions.md`).
 
 ## Open decisions and problems (one list)
 
-1. Docker restart policy for the five containers (auto-start after a reboot or not).
+1. Docker restart policy for the containers (auto-start after a reboot or not).
 2. Persistent journald (`sudo mkdir /var/log/journal`) so reboots keep their logs.
 3. Continuous-drive time limit in the control server.
 4. Forward-direction calibration (`--pan-trim`) and the tilt bracket.

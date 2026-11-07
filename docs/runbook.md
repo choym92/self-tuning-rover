@@ -13,10 +13,11 @@ this page only says what to do. Jetson address and SSH: `AGENTS.md`. Current sta
 ## 2. Start the services (manual after every boot)
 
 ```sh
-ssh paulcho@192.168.1.238 'docker start rover-control rover-eyes; docker ps --format "{{.Names}} {{.Status}}"'
+ssh paulcho@192.168.1.238 'docker start rover-control rover-eyes rover-brainlink; docker ps --format "{{.Names}} {{.Status}}"'
 ```
 
-Add `rover-llm rover-stt rover-tts-st` to the `docker start` list when voice is wanted. The containers
+Add `rover-stt rover-tts-st` when voice is wanted. The LLM is on the home Mac mini (it must be on and logged in);
+`rover-brainlink` is the tunnel to it. Do not start `rover-llm`: it would take port 8080 and 3.8 GiB. The containers
 have no restart policy yet (`docs/STATUS.md`, open decision 1). Container run commands, if one is
 missing: `jetson/control/README.md`, `jetson/eyes/README.md`, `jetson/llm/README.md`, `jetson/tts/README.md`.
 
@@ -40,7 +41,7 @@ the page exists only through this tunnel.
 ## 5. One spoken turn (optional)
 
 From the repository on the Mac: `python3 jetson/voice/talk.py` (records 5 s on the rover microphone)
-or `python3 jetson/voice/talk.py --text "Hi"`. Needs `rover-stt`, `rover-llm`, `rover-tts-st` running.
+or `python3 jetson/voice/talk.py --text "Hi"`. Needs `rover-stt`, `rover-brainlink`, `rover-tts-st` running and the Mac mini up.
 
 ## 6. Charge
 
