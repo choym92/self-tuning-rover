@@ -286,8 +286,11 @@ class Mind:
         with urllib.request.urlopen(req, timeout=30) as r:
             return json.loads(r.read()).get("text", "").strip()
 
-    def reply_stream(self, heard):
+    def reply_stream(self, heard, interrupted=False):
         rule = "이번 답은 반드시 한국어로, 반말로 짧게." if HANGUL.search(heard) else "Answer in English."
+        if interrupted:
+            rule += (" Paul just cut you off mid-answer. Drop what you were saying: do not finish it, repeat it or"
+                     " go back to it. Reply only to his new words, briefly.")
         messages = [{"role": "system", "content": self.persona + " " + rule}, *self.history, {"role": "user", "content": heard}]
         body = json.dumps({"messages": messages, "max_tokens": 110, "temperature": 0.9, "stream": True,
                            "chat_template_kwargs": {"enable_thinking": False}}).encode()
@@ -356,7 +359,7 @@ class Mind:
         return None
 
     # --- one turn -------------------------------------------------------------------------
-    def turn(self, source, frames, called="", question="", depth=0):
+    def turn(self, source, frames, called="", question="", depth=0, interrupted=False):
         """One exchange. With `question` (said in the same breath as the name) Kalman answers at once;
         otherwise it beeps and records the question."""
         self.journal.write("wake", source=source, heard=called)
@@ -395,7 +398,7 @@ class Mind:
             t2 = time.monotonic()
             lang = "ko" if HANGUL.search(heard) else "en"
             try:
-                resp, stream = self.reply_stream(heard)
+                resp, stream = self.reply_stream(heard, interrupted)
             except Exception as e:
                 self.journal.write("error", where="llm", error=str(e))
                 self.play(path=os.path.join(self.a.voice_dir, f"brain_offline_{lang}.wav"))
@@ -435,7 +438,9 @@ class Mind:
             reply = " ".join(said) + (" [interrupted]" if cut else "")
             self.journal.write("reply", text=reply, model=self.a.model_name, first_sound_ms=first,
                                ms=round((time.monotonic() - t2) * 1000))
-            self.history.extend([{"role": "user", "content": heard}, {"role": "assistant", "content": reply}])
+            # An interrupted answer stays in the history only as a stub, so the model does not pick it up again.
+            kept = "(I started answering but Paul cut me off.)" if cut else reply
+            self.history.extend([{"role": "user", "content": heard}, {"role": "assistant", "content": kept}])
             self.convo_until = time.monotonic() + 0.3 + self.a.follow_s
             if cut:
                 self.counts["interrupts"] += 1
@@ -444,7 +449,7 @@ class Mind:
                 woke, _ = split_wake(cut)
                 if depth < 3 and (rest or woke):         # "Kalman, ..." gets an answer; "stop" just stops
                     self.speaking = False
-                    self.turn("interrupt", frames, called=cut, question=rest, depth=depth + 1)
+                    self.turn("interrupt", frames, called=cut, question=rest, depth=depth + 1, interrupted=True)
         finally:
             time.sleep(0.3)
             self.speaking = False
