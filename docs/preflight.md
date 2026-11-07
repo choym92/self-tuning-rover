@@ -372,3 +372,34 @@ Adversarial review: not run; one file, documented upstream flag, trivially rever
 Commands: `scripts/jetson-audio-board-pulse-ignore.sh` (`--check` read-only; `sudo ... ` asks for `yes`). Verification afterwards: six back-to-back `aplay` of a silent 1 s WAV on `plughw:1,0` without the retry loop must give zero "busy" (baseline 3 of 6 failed), and `pactl list cards short` as gdm must not list the board.
 
 Outcome: run by Paul on 2026-11-07 13:42 EST. `--check` had passed. Before: gdm's PulseAudio listed the board (card index 1 of 4). After: `PULSE_IGNORE=1` on card1, gdm's PulseAudio restarted (new pid) and lists 3 cards without the board; `systemctl --machine=gdm@.host --user restart pulseaudio.service` worked as root (assumption confirmed). Six silent `aplay` in a row: 0 busy (`docs/verify.md`). A PulseAudio instance for paulcho appeared during the test and also omits the board. Side effect: none seen; no reboot done yet, so the rule's effect at boot (card enumerated before PulseAudio starts) is INFERENCE from the udev mechanism until the next boot is checked.
+
+## Gemma on the home Mac mini, rover connects by tunnel (2026-11-07, written before running)
+
+Goal: move the rover's LLM off the Jetson (frees 3.84 GiB for vision) with no way for the Mac mini to act on the rover. Paul chose the transport (option A) after an adversarial review refuted the first proposal, in which the mini dialled the rover: a `restrict` key still ran commands, a `-L 8091` forward reached e-stop reset and drive, and a stale `-R` listener blocked reconnects. Decision record: `docs/decisions.md` once it works.
+
+Exact versions: Mac mini M4, 16 GB, macOS 26.4 (25E246), user `paul`; llama.cpp b11146 (= v0.5.0, commit `7fe450e`, the Jetson's engine), `llama-b11146-bin-macos-arm64.tar.gz` sha256 `1ad3f9eff80edb9dbef4259ad564d1720612ef7eea48fa4afed0e54f5f3d5711`; model `gemma-4-E2B-it-Q4_K_M.gguf` sha256 `740185b2...34b8`, identical on MacBook and Jetson.
+
+Official sources: [llama.cpp releases](https://github.com/ggml-org/llama.cpp/releases), [Apple TN3179 local network privacy](https://developer.apple.com/documentation/technotes/tn3179-understanding-local-network-privacy), [OpenSSH sshd.8](https://github.com/openssh/openssh-portable/blob/V_8_9_P1/sshd.8).
+
+Known issues: llama.cpp #30256 (with `json_schema`, thinking can leak; `talk.py` sends no schema), #29521 (Metal OOM on a 31B model with auto-fit context; keep `-c 4096`). Homebrew's llama.cpp is not pinned and shares the machine with other work, so it is not used.
+
+| Assumption | Evidence | Label |
+|---|---|---|
+| Mini has room | 80 % memory free, 105 GiB disk, 16 GB | VERIFIED |
+| Mini stays awake | `sleep 0 (prevented)` by Amphetamine, up 45 days | VERIFIED |
+| Mini is on WiFi, Ethernet unplugged | default route en1, en0 has no address | VERIFIED |
+| Application Firewall off, so any LAN bind is exposed | `socketfilterfw --getglobalstate` | VERIFIED; llama-server binds 127.0.0.1 only |
+| FileVault on: after a restart nothing runs until it is unlocked and `paul` is logged in | `fdesetup status`; LaunchAgents need a session | VERIFIED state, INFERENCE effect; accepted, shows as `BRAIN off` |
+| A LaunchAgent can use Metal | OpenClaw and Araverus already run that way; Metal not yet tried | INFERENCE until step 4 |
+| Tunnel with the rover as client needs no Local Network permission on the mini | TN3179: accepting incoming TCP needs no privilege | VERIFIED in the document |
+| Gemma behaves the same on Metal | not run yet | Step 3 measures it |
+
+Steps, each with Paul's go: (3) `~/rover-brain` on the mini, engine and model copied, loopback only, compared with the Jetson; (4) LaunchAgent; (5) tunnel container on the Jetson on a side port; (6) stop `rover-llm`, move the tunnel to 8080, `docker start` list updated; (7) `talk.py` failure handling and the console `BRAIN` chip.
+
+Key on the mini for step 5: `restrict,port-forwarding,command="/usr/bin/false",from="<jetson ip>",permitopen="127.0.0.1:8080"`. Never reuse the refuted line.
+
+Reversibility: step 3 is removed with `rm -rf ~/rover-brain`. OpenClaw, Araverus and the Jetson are not touched. Rollback after step 6: stop the tunnel first, then `docker start rover-llm` (stop, do not remove, the container).
+
+Adversarial review: done on 2026-11-07 (first proposal refuted, this one is its recommendation).
+
+Outcome: pending.
