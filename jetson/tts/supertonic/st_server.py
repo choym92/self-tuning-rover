@@ -9,6 +9,7 @@ from supertonic import TTS
 ap = argparse.ArgumentParser()
 ap.add_argument("--assets", required=True)
 ap.add_argument("--port", type=int, default=8093)
+ap.add_argument("--host", default="0.0.0.0", help="127.0.0.1 outside a container (the Mac mini)")
 args = ap.parse_args()
 
 t0 = time.perf_counter()
@@ -75,4 +76,4 @@ class H(BaseHTTPRequestHandler):
         pass
 
 
-ThreadingHTTPServer(("0.0.0.0", args.port), H).serve_forever()
+ThreadingHTTPServer((args.host, args.port), H).serve_forever()

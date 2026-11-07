@@ -270,12 +270,22 @@ class Mind:
         return resp, sse_text(resp)
 
     def synthesize(self, text):
+        """Kalman's voice from the Mac mini (about 5x faster, docs/verify.md); the Jetson's own Supertonic
+        at fewer steps if the Mac mini does not answer."""
         lang = "ko" if HANGUL.search(text) else "en"
-        body = json.dumps({"text": text, "lang": lang, "voice": self.a.voice, "steps": self.a.tts_steps,
-                           "speed": self.a.tts_speed}).encode()
-        req = urllib.request.Request(self.a.tts + "/say", data=body, headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=60) as r:
-            return r.read()
+        last = None
+        for url, steps, timeout in ((self.a.tts, self.a.tts_steps, 10), (self.a.tts_fallback, self.a.fallback_steps, 60)):
+            if not url:
+                continue
+            body = json.dumps({"text": text, "lang": lang, "voice": self.a.voice, "steps": steps, "speed": self.a.tts_speed}).encode()
+            try:
+                with urllib.request.urlopen(urllib.request.Request(url + "/say", data=body, headers={"Content-Type": "application/json"}),
+                                            timeout=timeout) as r:
+                    return r.read()
+            except Exception as e:
+                last = e
+                self.journal.write("error", where="tts", url=url, error=str(e))
+        raise RuntimeError("no voice: %s" % last)
 
     def play(self, wav=None, path=None):
         cmd = ["aplay", "-q", "-D", self.a.speaker] + ([path] if path else ["-"])
@@ -473,7 +483,8 @@ def main():
     ap.add_argument("--speaker", default="plughw:1,0")
     ap.add_argument("--stt", default="http://127.0.0.1:8095")
     ap.add_argument("--llm", default="http://127.0.0.1:8080")
-    ap.add_argument("--tts", default="http://127.0.0.1:8093")
+    ap.add_argument("--tts", default="http://127.0.0.1:8097", help="Supertonic on the Mac mini through rover-brainlink")
+    ap.add_argument("--tts-fallback", default="http://127.0.0.1:8093", help="the Jetson's own Supertonic (rover-tts-st)")
     ap.add_argument("--voice", default="M1")
     ap.add_argument("--language", default="en", help="Whisper language for now (English-only model setting)")
     ap.add_argument("--model-name", default="gemma-4-E2B-it-Q4_K_M", help="recorded in the journal")
@@ -481,7 +492,8 @@ def main():
     ap.add_argument("--journal", default="/journal")
     ap.add_argument("--voice-dir", default="/voice")
     ap.add_argument("--follow-s", type=float, default=8.0, help="after a reply, seconds in which no name is needed")
-    ap.add_argument("--tts-steps", type=int, default=6, help="Supertonic steps: 10 took 1.3-1.7 s per audio second on the Jetson, 6 about 0.6-0.8")
+    ap.add_argument("--tts-steps", type=int, default=10, help="Mac mini: 0.27-0.34 s per audio second at 10 steps")
+    ap.add_argument("--fallback-steps", type=int, default=6, help="Jetson: 10 steps took 1.3-1.7 s per audio second, 6 about 0.6-0.8")
     ap.add_argument("--tts-speed", type=float, default=1.1)
     ap.add_argument("--port", type=int, default=8096)
     ap.add_argument("--vad-model", default="/models/sherpa/silero_vad.onnx")

@@ -607,6 +607,20 @@ Both stayed in persona and answered Korean in 반말; E4B's replies were shorter
 about its own day as the persona asks. Mini memory free fell to 27 % with both models loaded.
 Korean harness grading stays unusable (1/5 for every model so far).
 
+Supertonic 3 (same model files, voice M1, English) on the Jetson CPU against the Mac mini (venv,
+supertonic 1.3.1, onnxruntime 1.19.2 because the mini's Python is 3.9), same day 18:05 EST, median of
+three, synthesis time only:
+
+| Sentence (audio length) | Jetson 10 steps | Jetson 6 steps, speed 1.15 | Mac mini 10 steps | Mac mini 6 steps, speed 1.1 |
+|---|---|---|---|---|
+| "Just... operational." (2.5 s) | 4.31 s | 1.80 s | 0.85 s | 0.53 s |
+| "The battery is getting a little low, so..." (5.1 s) | 6.86 s | 2.63 s | 1.40 s | 0.84 s |
+
+The Jetson figures are slower than the 0.7-0.84 s per audio second measured on 2026-11-06 (the CPU was
+busier: rover-mind, Whisper and the eyes service were running). Through the tunnel from the Jetson,
+the long sentence at 10 steps took 1.62 s. `rover-mind` now uses the Mac mini voice at 10 steps and
+falls back to the Jetson at 6 steps (a dead primary cost 1.15 s in total before the fallback answered).
+
 ## Rover microphone and Whisper: can it understand Paul? (2026-11-07, Jetson on the rover)
 
 Camera microphone (`plughw:0,0`, gain 100 %), Paul speaking, `jetson/voice/mic_test.py`, six English

@@ -317,6 +317,7 @@ Compared on the Jetson with clocks locked (`docs/verify.md`): YOLO26n 3.6 ms / ~
 
 - Gemma moved from the Jetson to the always-on Mac mini (M4, 16 GB): same engine and model file, twice the generation speed, identical test-set scores; the Jetson gains about 2.85 GiB for vision (`docs/verify.md`).
 - Transport, Paul's choice of option A: the rover opens a one-way SSH tunnel (`jetson/brainlink/`); the mini's key line allows only a forward to its own `127.0.0.1:8080`, no commands and no reverse forwards. Rejected: the mini dialling the rover (an adversarial review showed the key could run commands, reach the console's e-stop reset and drive, and leave stale listeners) and a LAN port with an API key (the mini's firewall is off and traffic would be cleartext).
+- Voice moved too (Paul, 2026-11-07): Supertonic runs on the Mac mini (`macmini/ai.rover.voice.plist`, loopback 8093) behind the same tunnel (Jetson `127.0.0.1:8097`), about five times faster than the Jetson CPU; the Jetson's `rover-tts-st` stays as the fallback and for the offline line.
 - Consequence: when the Mac mini is off, locked after a restart (FileVault) or unreachable, Kalman cannot talk; motion and safety never depend on it. Which model the mini runs is a separate, later choice.
 
 ## Kalman's mind: staged plan, speed layers and storage (2026-11-07, DECIDED by Paul)
