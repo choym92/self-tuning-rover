@@ -3,6 +3,30 @@
 Check each layer separately, cheaply, against a reference. "The robot doesn't move" is an end-to-end symptom and does not point to a cause.
 Record measured values here with dates.
 
+<!-- contents -->
+Contents (search these headings first; open only the section you need):
+
+- [Per-layer checks](#per-layer-checks)
+- [Initial hardware checks](#initial-hardware-checks)
+- [The most important habit](#the-most-important-habit)
+- [Checks after the NVMe move and the 36.4.7 upgrade (2026-09-24) — all pass](#checks-after-the-nvme-move-and-the-3647-upgrade-2026-09-24--all-pass)
+- [RealSense software path without a camera (2026-09-24) — pass](#realsense-software-path-without-a-camera-2026-09-24--pass)
+- [Checks with the Jetson on again (2026-09-25) — read-only](#checks-with-the-jetson-on-again-2026-09-25--read-only)
+- [Checks after the R36.4.7 → R36.5.2 upgrade (2026-09-25) — all pass](#checks-after-the-r3647--r3652-upgrade-2026-09-25--all-pass)
+- [LLM on the Jetson, llama.cpp v0.5.0 built in a container (2026-09-25)](#llm-on-the-jetson-llamacpp-v050-built-in-a-container-2026-09-25)
+- [Whisper base/en live STT (2026-09-25)](#whisper-baseen-live-stt-2026-09-25)
+- [RealSense D436 first hardware checks (2026-10-02 Mac, 2026-10-03 Jetson)](#realsense-d436-first-hardware-checks-2026-10-02-mac-2026-10-03-jetson)
+- [Person detection with distance: YOLO26n + D436 (2026-10-03, Jetson)](#person-detection-with-distance-yolo26n--d436-2026-10-03-jetson)
+- [Owner face recognition: YuNet + SFace on top of YOLO26s (2026-10-03, Jetson)](#owner-face-recognition-yunet--sface-on-top-of-yolo26s-2026-10-03-jetson)
+- [Jetson power draw by workload (2026-10-17, Jetson, MAXN_SUPER, clocks not locked)](#jetson-power-draw-by-workload-2026-10-17-jetson-maxnsuper-clocks-not-locked)
+- [Control console stage 1, 5 MP camera and microphones (2026-11-06, Jetson on the rover)](#control-console-stage-1-5-mp-camera-and-microphones-2026-11-06-jetson-on-the-rover)
+- [On-robot text-to-speech: Kokoro-82M through kokoro-onnx on the CPU (2026-11-06, Jetson, Whisper + Gemma + console running)](#on-robot-text-to-speech-kokoro-82m-through-kokoro-onnx-on-the-cpu-2026-11-06-jetson-whisper--gemma--console-running)
+- [Supertonic 3 on the Jetson CPU, Korean and English (2026-11-06)](#supertonic-3-on-the-jetson-cpu-korean-and-english-2026-11-06)
+- [Audio8 TTS Preview 0.1B (ONNX INT8) against Supertonic 3 on the Jetson CPU (2026-11-07)](#audio8-tts-preview-01b-onnx-int8-against-supertonic-3-on-the-jetson-cpu-2026-11-07)
+- [Console stage 2: camera view in the page, D436 connected on the rover (2026-11-07, Jetson on the rover)](#console-stage-2-camera-view-in-the-page-d436-connected-on-the-rover-2026-11-07-jetson-on-the-rover)
+- [Eyes service: D436 colour and depth in the console page (2026-11-07, Jetson on the rover)](#eyes-service-d436-colour-and-depth-in-the-console-page-2026-11-07-jetson-on-the-rover)
+- [Pan-tilt settle correction (2026-11-07, Jetson on the rover)](#pan-tilt-settle-correction-2026-11-07-jetson-on-the-rover)
+
 ## Per-layer checks
 
 | What | How | Compare against | Measured |

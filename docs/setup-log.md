@@ -4,6 +4,17 @@ What was done and checked, by date. Reasons live in [decisions.md](decisions.md)
 
 ---
 
+<!-- contents -->
+Contents (search these headings first; open only the section you need):
+
+- [2026-09-23 (Tue) — Jetson first boot](#2026-09-23-tue--jetson-first-boot)
+- [2026-09-23 (evening) — moved the system to the NVMe SSD](#2026-09-23-evening--moved-the-system-to-the-nvme-ssd)
+- [2026-09-25 — R36.4.7 → R36.5.2 (JetPack 6.2.3) by apt, done by hand](#2026-09-25--r3647--r3652-jetpack-623-by-apt-done-by-hand)
+- [2026-09-25 evening — first live Whisper STT on the Jetson](#2026-09-25-evening--first-live-whisper-stt-on-the-jetson)
+- [2026-10-31 — UGV Rover PT arrived; Jetson assembled into it (not powered)](#2026-10-31--ugv-rover-pt-arrived-jetson-assembled-into-it-not-powered)
+- [2026-11-06 — first power-on of the rover, Jetson on WiFi](#2026-11-06--first-power-on-of-the-rover-jetson-on-wifi)
+- [2026-11-07 — Console camera view, D436 on the rover, audio and WiFi incidents](#2026-11-07--console-camera-view-d436-on-the-rover-audio-and-wifi-incidents)
+
 ## 2026-09-23 (Tue) — Jetson first boot
 
 ### Checked

@@ -24,7 +24,9 @@ live device state from it: run its read-only checks when live state matters.
 | Claim about measured behavior | `docs/verify.md` |
 | Command that changes the Jetson/system | relevant entry in `docs/preflight.md` |
 | Investigating an earlier setup failure | relevant dated section in `docs/setup-log.md` |
-| Voice work | `jetson/voice/README.md`, `docs/voice-orchestration.md` |
+| Day-to-day operation (power on, services, tunnel, charge, shut down, recover) | `docs/runbook.md` |
+| Driving console or the D436 eyes service | `jetson/control/README.md`, `jetson/eyes/README.md` |
+| Voice work | `jetson/voice/README.md`, `docs/voice-orchestration.md`; TTS in `jetson/tts/README.md` |
 | LLM work | `jetson/llm/README.md`; results in `docs/verify.md` |
 | Parts or purchase status | `docs/build-spec.md` |
 | Physical layout, device names or a hardware quirk | `docs/rover-hardware.md` |

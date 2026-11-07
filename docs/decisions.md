@@ -4,6 +4,33 @@ Hardest-to-reverse first. For answering "why did we do this?" later.
 
 ---
 
+<!-- contents -->
+Contents (search these headings first; open only the section you need):
+
+- [AI use: unrestricted — personal project (2026-09-23)](#ai-use-unrestricted--personal-project-2026-09-23)
+- [Install JetPack 6.x, not 7.2.1 (2026-09-23)](#install-jetpack-6x-not-721-2026-09-23)
+- [Write the SD card with `dd` instead of Etcher (2026-09-23)](#write-the-sd-card-with-dd-instead-of-etcher-2026-09-23)
+- [Defer the depth camera (D435i) (2026-09-23)](#defer-the-depth-camera-d435i-2026-09-23)
+- [Move the OS to NVMe now: SD image copy + boot-config edit, microSD kept as fallback (2026-09-23)](#move-the-os-to-nvme-now-sd-image-copy--boot-config-edit-microsd-kept-as-fallback-2026-09-23)
+- [Storage (2026-09-23)](#storage-2026-09-23)
+- [Networking (2026-09-23)](#networking-2026-09-23)
+- [Webcam (2026-09-23)](#webcam-2026-09-23)
+- [Robot base: wheeled, built from parts — no Roomba (2026-09-24)](#robot-base-wheeled-built-from-parts--no-roomba-2026-09-24)
+- [D436 on the pan-tilt head (2026-10-31, DECIDED by Paul)](#d436-on-the-pan-tilt-head-2026-10-31-decided-by-paul)
+- [Camera alternatives considered before the D436 pick (2026-09-24)](#camera-alternatives-considered-before-the-d436-pick-2026-09-24)
+- [Voice input/output: far-field USB mic array, local STT/TTS (2026-09-24, planned)](#voice-inputoutput-far-field-usb-mic-array-local-stttts-2026-09-24-planned)
+- [Temporary: `paulcho` in the `docker` group for the LLM test day (2026-09-25)](#temporary-paulcho-in-the-docker-group-for-the-llm-test-day-2026-09-25)
+- [On-robot LLM: size before novelty (2026-09-24, planned)](#on-robot-llm-size-before-novelty-2026-09-24-planned)
+- [On-robot LLM, first measurements (2026-09-25, evening) — recommendation, not yet a decision](#on-robot-llm-first-measurements-2026-09-25-evening--recommendation-not-yet-a-decision)
+- [Deferred: manipulation arm (SO-101 + LeRobot) as a later phase (2026-09-24)](#deferred-manipulation-arm-so-101--lerobot-as-a-later-phase-2026-09-24)
+- [Agent documentation and decision review (2026-09-25, decided)](#agent-documentation-and-decision-review-2026-09-25-decided)
+- [Person/object detector: RF-DETR-Nano, TensorRT FP16 (2026-10-03, DECIDED by Paul)](#personobject-detector-rf-detr-nano-tensorrt-fp16-2026-10-03-decided-by-paul)
+- [Owner recognition: SCRFD + ArcFace R50 with a guided gallery (2026-10-03, DECIDED by Paul)](#owner-recognition-scrfd--arcface-r50-with-a-guided-gallery-2026-10-03-decided-by-paul)
+- [On-robot voice output: Kokoro-82M fp32 on the CPU (2026-11-06, SUPERSEDED the same evening by Supertonic 3, below)](#on-robot-voice-output-kokoro-82m-fp32-on-the-cpu-2026-11-06-superseded-the-same-evening-by-supertonic-3-below)
+- [Console control server owns the UART (2026-11-06, DECIDED)](#console-control-server-owns-the-uart-2026-11-06-decided)
+- [On-robot voice: Supertonic 3, voice M1, for both English and Korean (2026-11-06, DECIDED by Paul)](#on-robot-voice-supertonic-3-voice-m1-for-both-english-and-korean-2026-11-06-decided-by-paul)
+- [The robot's name is Wall-E (2026-11-06, DECIDED by Paul)](#the-robots-name-is-wall-e-2026-11-06-decided-by-paul)
+
 ## AI use: unrestricted — personal project (2026-09-23)
 
 - The robot is a personal project. AI is used fully: writing code, tuning parameters, and an LLM-driven tuning loop.

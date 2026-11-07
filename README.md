@@ -44,10 +44,15 @@ direction belongs in `docs/STATUS.md`.
 | [docs/preflight.md](docs/preflight.md) | Checks written *before* each device-changing step: official sources, device facts, VERIFIED vs INFERENCE, fallback |
 | [docs/verify.md](docs/verify.md) | Per-layer verification procedures and the measured values |
 | [docs/build-spec.md](docs/build-spec.md) | Parts, SKUs, prices — actual purchases separated from plans |
-| [docs/reference/](docs/reference/) | Dated research snapshots kept for reuse: NVIDIA devkit guide review (2026-09-23), parts-build BOM (2026-09-22), software plan (2026-09-22), lessons from other builds (2026-09-24), sources on running small LLMs on this board incl. the R36.4.7 CUDA allocation regression (2026-09-25). Not maintained; decisions.md is current |
-| [scripts/](scripts/) | Guarded scripts: microSD flashing from a Mac, NVMe install on the Jetson |
+| [docs/rover-hardware.md](docs/rover-hardware.md) | Where things are on the rover, device names (`/dev/video*`, sound cards, ports), known traps |
+| [docs/runbook.md](docs/runbook.md) | Day-to-day operation: power on, start the services, tunnel, drive, charge, shut down, recover |
+| [docs/reference/](docs/reference/) | Dated research snapshots kept for reuse (devkit guide review, parts BOM, software plan, lessons from other builds, small-LLM sources, agent runtimes, HF model shortlist, vision prior art; 2026-09-22 to 2026-10-03). Not maintained; decisions.md is current |
+| [scripts/](scripts/) | Guarded scripts: microSD flashing from a Mac, NVMe install, UART boot entries, the PulseAudio udev rule |
 | [jetson/](jetson/) | Code that runs on the robot (`requirements.txt` documents the Python environment) |
-| [jetson/voice/](jetson/voice/README.md) | Live Mac microphone → Jetson Whisper base/en; CUDA build and first live transcript verified, wake word/VAD pending |
+| [jetson/control/](jetson/control/README.md) | The driving console: control server (owns the UART), browser page, safety rules, keys |
+| [jetson/eyes/](jetson/eyes/README.md) | D436 eyes service: colour and depth streams for the console, standby, reconnect |
+| [jetson/voice/](jetson/voice/README.md) | One spoken turn: rover microphone → Whisper → Gemma → Supertonic → rover speaker |
+| [jetson/llm/](jetson/llm/README.md), [jetson/tts/](jetson/tts/README.md) | llama.cpp server runbook and the TTS containers (Supertonic 3, Kokoro) |
 | [docs/voice-orchestration.md](docs/voice-orchestration.md) | Working voice/orchestration architecture, safety boundary, phased implementation and open UX decisions |
 | [tools/](tools/) | Replay, scoring and tuning tools that run on the Mac (empty for now) |
 

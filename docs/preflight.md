@@ -2,6 +2,20 @@
 
 Every step that changes the device (flashing, partitioning, boot config, firmware, installing tools, upgrades) gets a preflight entry here **before** any command is run. Read-only checks and research do not need one.
 
+<!-- contents -->
+Contents (search these headings first; open only the section you need):
+
+- [Checklist](#checklist)
+- [Template](#template)
+- [<step name> (<date>)](#step-name-date)
+- [Move the OS from microSD to NVMe (2026-09-23)](#move-the-os-from-microsd-to-nvme-2026-09-23)
+- [`apt upgrade` 36.4.4 → 36.4.7 on the NVMe system (2026-09-23/24)](#apt-upgrade-3644--3647-on-the-nvme-system-2026-09-2324)
+- [`apt dist-upgrade` R36.4.7 → R36.5.2 (JetPack 6.2.1 → 6.2.3) on the NVMe system (2026-09-25, written before running)](#apt-dist-upgrade-r3647--r3652-jetpack-621--623-on-the-nvme-system-2026-09-25-written-before-running)
+- [First LLM test in a container: llama.cpp built from source + four small 2026 models (2026-09-25, written before running; revised the same day)](#first-llm-test-in-a-container-llamacpp-built-from-source--four-small-2026-models-2026-09-25-written-before-running-revised-the-same-day)
+- [Whisper base: live Mac audio to Jetson CUDA container (2026-09-25)](#whisper-base-live-mac-audio-to-jetson-cuda-container-2026-09-25)
+- [UART1 boot test entries for the `/dev/ttyTHS1` DMA bug (2026-11-06, written before running)](#uart1-boot-test-entries-for-the-devttyths1-dma-bug-2026-11-06-written-before-running)
+- [PulseAudio must leave the rover audio board alone: `PULSE_IGNORE` udev rule (2026-11-07, written before running)](#pulseaudio-must-leave-the-rover-audio-board-alone-pulseignore-udev-rule-2026-11-07-written-before-running)
+
 ## Checklist
 
 1. **Official source** — the vendor doc for the exact version in use (NVIDIA Orin Nano user guide / JetPack docs for the installed JetPack, not only "latest"). Cite the page.
