@@ -25,6 +25,7 @@ Contents (search these headings first; open only the section you need):
 - [Audio8 TTS Preview 0.1B (ONNX INT8) against Supertonic 3 on the Jetson CPU (2026-11-07)](#audio8-tts-preview-01b-onnx-int8-against-supertonic-3-on-the-jetson-cpu-2026-11-07)
 - [Console stage 2: camera view in the page, D436 connected on the rover (2026-11-07, Jetson on the rover)](#console-stage-2-camera-view-in-the-page-d436-connected-on-the-rover-2026-11-07-jetson-on-the-rover)
 - [Eyes service: D436 colour and depth in the console page (2026-11-07, Jetson on the rover)](#eyes-service-d436-colour-and-depth-in-the-console-page-2026-11-07-jetson-on-the-rover)
+- [Gemma on the Mac mini (Metal) against the Jetson (2026-11-07)](#gemma-on-the-mac-mini-metal-against-the-jetson-2026-11-07)
 - [Rover microphone and Whisper: can it understand Paul? (2026-11-07, Jetson on the rover)](#rover-microphone-and-whisper-can-it-understand-paul-2026-11-07-jetson-on-the-rover)
 - [Pan-tilt settle correction (2026-11-07, Jetson on the rover)](#pan-tilt-settle-correction-2026-11-07-jetson-on-the-rover)
 
@@ -536,6 +537,28 @@ samples, 73 MiB; 5 MP big + D436 colour small at 5 fps 23%. Camera standby (`POS
 the first frame and the stream was back at 30 fps 3 s later. The eyes container restarts in 3 s. The tilt bracket shows
 as the black lower-right region in both D436 views. The page's three-source selector and the small
 picture were checked in the built-in browser; 17 unit tests pass on the Mac (15 control, 2 eyes).
+
+## Gemma on the Mac mini (Metal) against the Jetson (2026-11-07)
+
+Same engine (llama.cpp b11146 = v0.5.0, macOS arm64 release, sha256 checked), same GGUF (sha256
+`740185b2...34b8` on both), same server flags (`-ngl 99 -np 1 -c 4096 --load-mode none -fa on
+--ctx-checkpoints 0 --cache-ram 0`). Mac mini M4 16 GB, macOS 26.4, server on its loopback only,
+started by hand over SSH. Timings are the servers' own, so the network is not included.
+
+| | Mac mini (Metal) | Jetson (CUDA) |
+|---|---|---|
+| Generation | 55.6-56.5 tok/s | 27.3-27.8 tok/s |
+| Prompt (about 195 tokens, talk.py prompt) | about 300 ms | about 220 ms |
+| Wall time for the six talk.py-style turns | 0.57-1.15 s | 0.77-2.18 s |
+| `jetson/llm/harness.py` | honesty 5/5, tools 8/10, no-tool 3/3, context 1/1 | identical |
+| llama-bench pp190 / tg64, GPU | 724 / 56.2 tok/s | not run |
+| llama-bench pp190 / tg64, CPU only (`-ngl 0`) | 198 / 40.6 tok/s | not run |
+
+`--list-devices` shows `MTL0: Apple M4 (12124 MiB)`, and the GPU numbers match the server's, so the
+server used Metal. Replies with thinking off had no reasoning content on either machine; the persona
+answered "난 칼만이야" on both. Mini memory free fell from 80 % to 71 % with the model loaded. The
+first request after loading took 625 ms of prompt time (warm-up). Not yet measured: the Jetson-to-mini
+network on the real path (ping 5-96 ms over 2.4 GHz WiFi).
 
 ## Rover microphone and Whisper: can it understand Paul? (2026-11-07, Jetson on the rover)
 

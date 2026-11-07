@@ -402,4 +402,4 @@ Reversibility: step 3 is removed with `rm -rf ~/rover-brain`. OpenClaw, Araverus
 
 Adversarial review: done on 2026-11-07 (first proposal refuted, this one is its recommendation).
 
-Outcome: pending.
+Outcome: step 3 done 2026-11-07 16:20 EST. Engine and model copied to `~/rover-brain` (both sha256 checked), served on the mini's loopback by hand, Metal confirmed, answers and harness scores identical to the Jetson, generation twice as fast (`docs/verify.md`). The temporary server was stopped afterwards; nothing else on the mini changed. Steps 4-7 pending.
