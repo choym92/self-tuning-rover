@@ -7,7 +7,6 @@ Contents (search these headings first; open only the section you need):
 
 - [Checklist](#checklist)
 - [Template](#template)
-- [<step name> (<date>)](#step-name-date)
 - [Move the OS from microSD to NVMe (2026-09-23)](#move-the-os-from-microsd-to-nvme-2026-09-23)
 - [`apt upgrade` 36.4.4 → 36.4.7 on the NVMe system (2026-09-23/24)](#apt-upgrade-3644--3647-on-the-nvme-system-2026-09-2324)
 - [`apt dist-upgrade` R36.4.7 → R36.5.2 (JetPack 6.2.1 → 6.2.3) on the NVMe system (2026-09-25, written before running)](#apt-dist-upgrade-r3647--r3652-jetpack-621--623-on-the-nvme-system-2026-09-25-written-before-running)
