@@ -145,12 +145,12 @@ input[type=range] { width:100%; accent-color:var(--accent); margin:0; }
   let lastState = null, lastEvent = 0, sendTimer = null, lastReq = [0, 0];
 
   function request() {
-    let l = 0, r = 0;
-    if (pressed.has("w")) { l += 1; r += 1; }
-    if (pressed.has("s")) { l -= 1; r -= 1; }
-    if (pressed.has("a")) { l -= 1; r += 1; }
-    if (pressed.has("d")) { l += 1; r -= 1; }
-    return [Math.max(-1, Math.min(1, l)), Math.max(-1, Math.min(1, r))];
+    // Camera-first steering: A always turns the view left and D right, forward or backward
+    // (while reversing the wheel mix is mirrored, unlike a car). Paul's choice, 2026-11-07.
+    const t = (pressed.has("w") ? 1 : 0) - (pressed.has("s") ? 1 : 0);
+    let u = (pressed.has("d") ? 1 : 0) - (pressed.has("a") ? 1 : 0);
+    if (t < 0) u = -u;
+    return [Math.max(-1, Math.min(1, t + u)), Math.max(-1, Math.min(1, t - u))];
   }
   function post(path, body) {
     return fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}), keepalive: true })

@@ -43,6 +43,9 @@ PAN_LIMIT = 120           # degrees each way; keeps the D436 USB cable from wrap
 TILT_MIN, TILT_MAX = -30, 60   # firmware allows -30..90; 60 keeps the head clear of the body
 HEAD_SPD, HEAD_ACC = 40, 15    # T:133 speed/acceleration, moderate
 HEAD_MIN_INTERVAL = 0.1   # seconds between head commands
+HEAD_TOL = 0.3            # degrees; the ST3215 reports within about this, so closer is not worth a command
+HEAD_SETTLE = 0.6         # seconds after a head command before its reported position is trusted
+HEAD_SETTLE_TRIES = 3     # corrective nudges per target (gear play leaves 1 degree either way otherwise)
 SYNC_FILE = "/timesync/synchronized"   # systemd-timesyncd touches this after the first sync
 VIDEO_SIZE, VIDEO_FPS = (1280, 720), 20   # the 5 MP camera delivers this as MJPEG at 20 fps (verify.md)
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -121,9 +124,10 @@ class SerialLink:
 class Controller:
     """Turns browser requests into wheel commands under the safety rules."""
 
-    def __init__(self, link, cap=CAP_DEFAULT, allow_drive=False, clock=time.monotonic, synced=None):
+    def __init__(self, link, cap=CAP_DEFAULT, allow_drive=False, clock=time.monotonic, synced=None, trim=(0.0, 0.0)):
         self.link = link
         self.cap = cap
+        self.trim = (float(trim[0]), float(trim[1]))   # servo reading of the true forward direction (calibration)
         self.allow_drive = allow_drive
         self.clock = clock
         self.synced = synced or (lambda: os.path.exists(SYNC_FILE))
@@ -134,7 +138,9 @@ class Controller:
         self.last_pwm = (0, 0)
         self.moving = False
         self.last_reason = "idle"
-        self.head = (0.0, 0.0)          # target pan, tilt in degrees
+        self.head = (0.0, 0.0)          # target pan, tilt in degrees, in the calibrated (forward = 0) frame
+        self.head_cmd = (0.0, 0.0)      # what is actually sent: target plus trim plus settle corrections
+        self.head_tries = HEAD_SETTLE_TRIES
         self.head_dirty = False
         self.head_sent_t = -1e9
 
@@ -196,15 +202,38 @@ class Controller:
                 if self.estop:
                     return "estop"
                 self.head = (max(-PAN_LIMIT, min(PAN_LIMIT, p)), max(TILT_MIN, min(TILT_MAX, t)))
+                self.head_cmd = (self.head[0] + self.trim[0], self.head[1] + self.trim[1])
+                self.head_tries = 0
                 self.head_dirty = True
                 return "ok"
         except (TypeError, ValueError):
             return "bad_request"
 
     def _send_head(self):
-        self.link.send({"T": 133, "X": round(self.head[0], 1), "Y": round(self.head[1], 1), "SPD": HEAD_SPD, "ACC": HEAD_ACC})
+        x = max(-PAN_LIMIT, min(PAN_LIMIT, self.head_cmd[0]))
+        y = max(TILT_MIN, min(TILT_MAX, self.head_cmd[1]))
+        self.link.send({"T": 133, "X": round(x, 1), "Y": round(y, 1), "SPD": HEAD_SPD, "ACC": HEAD_ACC})
         self.head_dirty = False
         self.head_sent_t = self.clock()
+
+    def _settle_head(self, now):
+        """After the servos stop, compare the reported angles with the target and nudge once more
+        (gear play leaves about a degree either way). Gives up after HEAD_SETTLE_TRIES."""
+        if self.head_tries >= HEAD_SETTLE_TRIES or now - self.head_sent_t < HEAD_SETTLE:
+            return
+        fb = self.link.latest()
+        if fb.get("pan") is None or fb.get("tilt") is None:
+            return
+        ep = self.head[0] + self.trim[0] - float(fb["pan"])
+        et = self.head[1] + self.trim[1] - float(fb["tilt"])
+        if abs(ep) <= HEAD_TOL and abs(et) <= HEAD_TOL:
+            self.head_tries = HEAD_SETTLE_TRIES
+            return
+        # only the axis that is actually off moves; nudging inside the deadband would just dither
+        self.head_cmd = (self.head_cmd[0] + (ep if abs(ep) > HEAD_TOL else 0.0),
+                         self.head_cmd[1] + (et if abs(et) > HEAD_TOL else 0.0))
+        self.head_tries += 1
+        self._send_head()
 
     def _send_stop(self, hold=False):
         self.link.send({"T": 11, "L": 0, "R": 0})
@@ -219,6 +248,8 @@ class Controller:
             now = self.clock()
             if self.head_dirty and not self.estop and now - self.head_sent_t >= HEAD_MIN_INTERVAL:
                 self._send_head()
+            elif not self.head_dirty and not self.estop:
+                self._settle_head(now)
             if self.estop:
                 desired, reason = (0, 0), "estop"
             elif now - self.target_t > CMD_TTL:
@@ -248,6 +279,9 @@ class Controller:
                 "moving": self.moving,
                 "reason": self.last_reason,
                 "head": {"pan": round(self.head[0], 1), "tilt": round(self.head[1], 1),
+                         "actual_pan": None if fb.get("pan") is None else round(float(fb["pan"]) - self.trim[0], 1),
+                         "actual_tilt": None if fb.get("tilt") is None else round(float(fb["tilt"]) - self.trim[1], 1),
+                         "trim": [self.trim[0], self.trim[1]], "settle_tries": self.head_tries,
                          "pan_limit": PAN_LIMIT, "tilt_min": TILT_MIN, "tilt_max": TILT_MAX},
                 "battery_v": v,
                 "battery_state": None if v is None else ("stop" if v < LOW_V_STOP else "warn" if v < LOW_V_WARN else "ok"),
@@ -547,11 +581,13 @@ def main():
     ap.add_argument("--allow-drive", action="store_true", help="accept drive commands (off: telemetry only)")
     ap.add_argument("--camera", default="/dev/video0", help="V4L2 device for /video.mjpg; 'none' to run without video")
     ap.add_argument("--eyes", default="http://127.0.0.1:8094", help="eyes service (D436) proxied under /d436/; 'none' to disable")
+    ap.add_argument("--pan-trim", type=float, default=0.0, help="servo pan reading of the true forward direction (calibration)")
+    ap.add_argument("--tilt-trim", type=float, default=0.0, help="servo tilt reading of level forward (calibration)")
     args = ap.parse_args()
     if not 0 <= args.cap <= CAP_MAX:
         sys.exit("--cap must be 0-%d" % CAP_MAX)
     link = SerialLink(args.serial)
-    controller = Controller(link, cap=args.cap, allow_drive=args.allow_drive)
+    controller = Controller(link, cap=args.cap, allow_drive=args.allow_drive, trim=(args.pan_trim, args.tilt_trim))
     camera = Camera(None if args.camera == "none" else args.camera)
     eyes = EyesLink(None if args.eyes == "none" else args.eyes)
     httpd = serve(controller, args.host, args.port, os.path.join(HERE, "index.html"), camera, eyes)

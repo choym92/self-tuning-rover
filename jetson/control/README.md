@@ -63,7 +63,8 @@ ssh -N -L 8091:127.0.0.1:8091 paulcho@192.168.1.238
 ```
 
 Then open http://localhost:8091. Keys: W/A/S/D while held, Space = emergency stop, arrow keys
-move the head. The video panel plays `/video.mjpg` while the telemetry link is up and can be
+move the head. Steering is camera-first: A turns the view left and D right whether driving
+forward or backward (the wheel mix is mirrored while reversing). The video panel plays `/video.mjpg` while the telemetry link is up and can be
 switched off on the page to save bandwidth (about 1.4 MB/s at 1280x720, 20 fps). The source
 buttons on the picture choose what fills the big view; the small view shows the next source at
 5 fps and swaps on click. D436 views need the eyes service (`jetson/eyes/`), started separately;

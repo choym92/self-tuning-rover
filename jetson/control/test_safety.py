@@ -145,6 +145,35 @@ class ControllerTests(unittest.TestCase):
         self.assertEqual(ctl.move_head(pan=0, tilt=0), "estop")
         self.assertEqual(ctl.snapshot()["head"]["pan"], 115.0)
 
+    def test_head_settles_against_gear_play(self):
+        ctl, link, clock = make()
+        ctl.move_head(pan=0, tilt=0)
+        ctl.tick()                                   # command sent
+        self.assertEqual(link.sent[-1]["X"], 0.0)
+        link.fb["pan"], link.fb["tilt"] = -1.1, 0.3  # the servo stopped short, as seen on 2026-11-07
+        clock.advance(0.3); ctl.tick()
+        self.assertEqual(len(link.sent), 1)          # too early to trust the reading
+        clock.advance(server.HEAD_SETTLE); ctl.tick()
+        self.assertEqual((link.sent[-1]["X"], link.sent[-1]["Y"]), (1.1, 0.0))   # nudge by the error; tilt within tolerance
+        link.fb["pan"] = 0.1                         # now close enough
+        clock.advance(server.HEAD_SETTLE + 0.01); ctl.tick()
+        self.assertEqual(len(link.sent), 2)
+        self.assertEqual(ctl.snapshot()["head"]["actual_pan"], 0.1)
+        # never more than HEAD_SETTLE_TRIES nudges for one target
+        ctl.move_head(pan=30); clock.advance(server.HEAD_MIN_INTERVAL + 0.01); ctl.tick()
+        for _ in range(6):
+            link.fb["pan"] = 20.0
+            clock.advance(server.HEAD_SETTLE + 0.01); ctl.tick()
+        self.assertEqual(len(link.sent), 3 + server.HEAD_SETTLE_TRIES)
+
+    def test_head_trim_shifts_commands_and_readings(self):
+        link = FakeLink(); clock = FakeClock()
+        ctl = server.Controller(link, cap=80, allow_drive=True, clock=clock, synced=lambda: True, trim=(-1.1, 0.3))
+        ctl.move_head(pan=0, tilt=0); ctl.tick()
+        self.assertEqual((link.sent[-1]["X"], link.sent[-1]["Y"]), (-1.1, 0.3))   # forward is where the servo reads -1.1
+        link.fb["pan"], link.fb["tilt"] = -1.1, 0.3
+        self.assertEqual((ctl.snapshot()["head"]["actual_pan"], ctl.snapshot()["head"]["actual_tilt"]), (0.0, 0.0))
+
     def test_snapshot_reports_clock(self):
         ctl, _, _ = make(synced=False)
         self.assertFalse(ctl.snapshot()["clock_synced"])
