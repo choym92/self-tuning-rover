@@ -87,6 +87,36 @@ class WakeTests(unittest.TestCase):
         for heard, want in cases.items():
             self.assertEqual(mind.barge_in(heard, speaking), want, heard)
 
+    def test_double_talk_learns_echo_then_hears_paul(self):
+        dt = mind.DoubleTalk(ratio=2.0, hold_s=0.09, lag_s=0.06, min_level=900, warm_s=0)
+        env = [4000.0] * 100                    # Kalman speaking steadily
+        dt.reset(env)
+        for _ in range(40):                     # alone: mic hears 0.5 x playback
+            self.assertFalse(dt.feed(2000.0))
+        self.assertAlmostEqual(dt.gain, 0.5, places=2)
+        self.assertFalse(dt.feed(3000.0))       # a little louder: not enough
+        hits = [dt.feed(6000.0) for _ in range(3)]   # Paul over him: 3x the echo for 3 frames
+        self.assertEqual(hits, [False, False, True])
+
+    def test_double_talk_in_a_pause(self):
+        dt = mind.DoubleTalk(ratio=2.0, hold_s=0.09, lag_s=0.06, min_level=900, gain=0.5, warm_s=0)
+        dt.reset([4000.0] * 10 + [0.0] * 20)    # Kalman pauses after 0.3 s
+        for _ in range(10):                     # under his own voice a normal voice is not enough
+            self.assertFalse(dt.feed(1500.0))
+        # the 2-frame window still holds his voice for 2 frames, then the same level is heard in the gap
+        self.assertEqual([dt.feed(1500.0) for _ in range(5)], [False, False, False, False, True])
+
+    def test_double_talk_ignores_the_start_of_playback(self):
+        dt = mind.DoubleTalk(ratio=2.0, hold_s=0.09, lag_s=0.06, min_level=900, warm_s=0.3)
+        dt.reset([4000.0] * 40)
+        self.assertFalse(any(dt.feed(100.0) for _ in range(dt.warm)))   # silence before the echo arrives
+        self.assertIsNone(dt.gain)                                      # nothing learned from it
+
+    def test_envelope_of_a_wav(self):
+        env = mind.play_envelope(mind.tone(seconds=0.3))
+        self.assertTrue(9 <= len(env) <= 10)
+        self.assertGreater(max(env), 1000)
+
     def test_echo_share(self):
         self.assertTrue(mind.is_echo("battery is low", "My battery is low."))
         self.assertFalse(mind.is_echo("stop talking now", "My battery is low."))

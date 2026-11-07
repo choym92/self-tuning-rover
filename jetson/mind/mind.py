@@ -99,6 +99,50 @@ def barge_in(heard, spoken, min_words=3):
     return False, ""
 
 
+class DoubleTalk:
+    """Paul talking over Kalman, by sound alone (a Geigel-style double-talk test, no echo canceller):
+    the microphone level is compared with the loudest playback level of the last `lag_s` (so speaker and
+    pipe latency do not matter) times the speaker-to-mic gain, which is learned while Kalman speaks alone.
+    Louder than `ratio` x that for `hold_s` means someone else is making sound."""
+
+    def __init__(self, ratio=2.0, hold_s=0.2, lag_s=0.5, min_level=900.0, gain=None, warm_s=0.3):
+        self.ratio, self.min_level = ratio, min_level
+        self.warm = int(warm_s * RATE / FRAME)   # playback start: the echo has not reached the mic yet
+        self.hold = int(hold_s * RATE / FRAME)
+        self.lag = int(lag_s * RATE / FRAME)
+        self.gain = gain                       # echo level per unit of playback level; None until learned
+        self.reset([])
+
+    def reset(self, play_env):
+        self.env, self.i, self.run = play_env, 0, 0
+
+    def feed(self, mic_level):
+        """One microphone frame level; returns True when Paul is judged to be making sound."""
+        window = self.env[max(0, self.i - self.lag):self.i + 1]
+        self.i += 1
+        if self.i <= self.warm:
+            return False
+        ref = max(window) if window else 0.0
+        expected = (self.gain or 0.0) * ref
+        loud = self.gain is not None and mic_level > max(self.ratio * expected, self.min_level)
+        self.run = self.run + 1 if loud else 0
+        if not loud and ref > 500 and mic_level > 0:      # learn the echo gain while Kalman talks alone
+            g = mic_level / ref
+            self.gain = g if self.gain is None else 0.95 * self.gain + 0.05 * min(g, 4 * self.gain)
+        return self.run >= self.hold
+
+
+def play_envelope(wav):
+    """RMS of the playback per 30 ms, at the microphone's frame rate."""
+    with wave.open(io.BytesIO(wav)) as w:
+        rate, ch = w.getframerate(), w.getnchannels()
+        a = array.array("h", w.readframes(w.getnframes()))
+    if ch > 1:
+        a = a[::ch]
+    step = max(1, int(rate * FRAME / RATE))
+    return [math.sqrt(sum(x * x for x in a[i:i + step]) / step) for i in range(0, len(a) - step + 1, step)]
+
+
 def is_speech(text):
     """False for empty text, sound tags only ([BEEP], (noise)) and lines Whisper invents from noise."""
     words = re.sub(r"\[[^\]]*\]|\([^)]*\)", "", text).strip(" .,!?")
@@ -278,6 +322,7 @@ class Mind:
         self.gate_vad = make_vad(args.vad_model, silence_s=0.4)
         self.barge_vad = make_vad(args.vad_model, silence_s=0.3)
         self.counts = {"phrases": 0, "whisper_ms": 0, "wakes": 0, "follow_ups": 0, "interrupts": 0, "echoes": 0}
+        self.dtd = DoubleTalk()                # keeps the learned speaker-to-mic gain across replies
         self.convo_until = 0.0         # while now < this, a phrase needs no name (conversation mode)
         self.state = "starting"
         self.speaking = False
@@ -333,8 +378,13 @@ class Mind:
         return False
 
     def play_listening(self, wav, frames, gate, spoken):
-        """Play `wav` while still listening. Returns the interrupting phrase if Paul cut in, else None."""
+        """Play `wav` while still listening. Returns the interrupting phrase if Paul's words cut in,
+        ("sound", pre-roll frames) if a sound louder than Kalman's own echo did, else None."""
+        env = play_envelope(wav)
+        pre = deque(maxlen=int(0.6 * RATE / FRAME))
         for _ in range(20):
+            self.drain()                      # line the microphone up with the start of playback
+            self.dtd.reset(env)
             p = subprocess.Popen(["aplay", "-q", "-D", self.a.speaker, "-"], stdin=subprocess.PIPE, stderr=subprocess.PIPE)
 
             def feed():
@@ -345,7 +395,14 @@ class Mind:
                     pass
             threading.Thread(target=feed, daemon=True).start()
             while p.poll() is None:
-                phrase = gate.feed(next(frames))
+                frame = next(frames)
+                pre.append(frame)
+                if self.dtd.feed(rms(frame)):
+                    p.kill()
+                    p.wait()
+                    self.journal.write("while_speaking", sound=True, gain=round(self.dtd.gain or 0, 3))
+                    return ("sound", list(pre))
+                phrase = gate.feed(frame)
                 if not phrase:
                     continue
                 try:
@@ -450,7 +507,30 @@ class Mind:
             kept = "(I started answering but Paul cut me off.)" if cut else reply
             self.history.extend([{"role": "user", "content": heard}, {"role": "assistant", "content": kept}])
             self.convo_until = time.monotonic() + 0.3 + self.a.follow_s
-            if cut:
+            if cut and isinstance(cut, tuple):           # a sound: listen to what Paul is saying, from just before it
+                self.counts["interrupts"] += 1
+                seg = Endpointer(self.vad, start_s=3.0)
+                pcm = None
+                for f in cut[1]:
+                    done, pcm = seg.feed(f)
+                if not pcm:
+                    for f in frames:
+                        done, pcm = seg.feed(f)
+                        if done:
+                            break
+                said_now = ""
+                if pcm:
+                    try:
+                        said_now = self.transcribe(pcm)
+                    except Exception as e:
+                        self.journal.write("error", where="stt", error=str(e))
+                self.journal.write("interrupted", by="sound", heard=said_now)
+                woke, rest = split_wake(said_now)
+                question = rest if woke else said_now
+                if depth < 3 and is_speech(question) and not is_end(question) and not INTERRUPT.match(question):
+                    self.speaking = False
+                    self.turn("interrupt", frames, called=said_now, question=question, depth=depth + 1, interrupted=True)
+            elif cut:
                 self.counts["interrupts"] += 1
                 self.journal.write("interrupted", by=cut)
                 _, rest = barge_in(cut, "")
