@@ -423,3 +423,34 @@ Container `rover/supertonic:1.3.1` (`jetson/tts/supertonic/`), assets 383 MB, lo
 | Korean, short reply | M1, 8 | about 2.5 s | 1.7 s | about 0.7 |
 
 Kokoro fp32 on the same CPU: 0.6; Kokoro int8: 0.4. The benchmark claim that Supertonic is 2.7x faster than Kokoro was at 5 steps and on an x86 CPU; 5 steps were not tried here. All ten preset voices (F1-F5, M1-M5) synthesised Korean; M1-M5 were also played in English. With Kokoro stopped, system memory was 5.6 GB used and 1.7 GB available (Gemma, Whisper, Supertonic, console server). The Korean reply language from Gemma needed an explicit per-turn instruction; the system prompt alone was ignored once.
+
+## Audio8 TTS Preview 0.1B (ONNX INT8) against Supertonic 3 on the Jetson CPU (2026-11-07)
+
+Candidate from the 2026-11-07 survey of open TTS models with Korean and English (Apache-2.0,
+about 100M parameters, CPU-only ONNX). Container built from `python:3.11-slim` with the vendor's
+`onnx_runtime_0_1b_int8` folder at commit `1d64afcc` of `Edge0-AI/Audio8_TTS`, model revision
+`317c12d4` (437 MB without the voice-registration encoder), bundled `default` voice (its
+reference clip is Chinese), 6 threads. Image, model files and Dockerfile were deleted after
+the test (Paul, 2026-11-07); this record is what remains.
+Measured with `jetson/tts/compare_tts.py` while Gemma, Whisper, Supertonic and the console
+server were running; Supertonic at 8 steps, voice M1.
+
+| Engine | Input | Audio | Synthesis | Compute per audio second | Raw peak |
+|---|---|---|---|---|---|
+| Supertonic 3 | English, 2 sentences | 7.3 s | 5.8 s | 0.79 | 0.89 |
+| Supertonic 3 | Korean, 2 sentences | 8.7 s | 6.0 s | 0.69 | 0.89 |
+| Audio8 0.1B INT8 | English, same | 7.1 s | 48.1 s | 6.81 | 0.69 |
+| Audio8 0.1B INT8 | Korean, same | 8.6 s | 55.5 s | 6.43 | 0.65 |
+
+Audio8 is about nine times slower than Supertonic on this CPU and far from real time. Memory:
+1.04 GiB after loading, 1.80 GiB after the first synthesis (vendor figure: about 0.6 GB on
+their host); during the run the system fell to 57 MB available and the Supertonic container's
+resident set was pushed from 683 MiB to 98 MiB. The other services survived; the container was
+stopped right after the measurement. The vendor's "19 ms per slow-AR token" was measured with
+8 threads on an unnamed host; here one 46 ms audio frame costs about 300 ms. Quality was judged
+by ear only (Paul, same four clips, loudness matched).
+
+Incident while playing the clips: the desktop session's PulseAudio (`/usr/bin/pulseaudio`,
+pid 20368) opened `pcmC1D0p` for a few seconds each time `aplay` released it, so direct
+`aplay -D plughw:1,0` failed with "Device or resource busy" on three of six attempts and
+succeeded on retry. Earlier spoken turns on 2026-11-06 did not hit this.
