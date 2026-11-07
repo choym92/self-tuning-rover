@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ko">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -74,65 +74,65 @@ input[type=range] { width:100%; accent-color:var(--accent); margin:0; }
   <span id="c-bat" class="chip mono">BAT --</span>
   <span id="c-mode" class="chip mono">DRIVE --</span>
   <span class="spacer"></span>
-  <button id="reset" type="button" hidden>비상 정지 해제</button>
-  <button id="estop" type="button">비상 정지 (Space)</button>
+  <button id="reset" type="button" hidden>Reset E-stop</button>
+  <button id="estop" type="button">E-STOP (Space)</button>
 </header>
 <main>
   <section class="video">
     <div class="vid">
       <img id="cam" alt="">
-      <div id="nocam" class="nocam">카메라 없음</div>
-      <img id="pip" class="pip" alt="" title="클릭하면 큰 화면과 바뀜">
+      <div id="nocam" class="nocam">No camera</div>
+      <img id="pip" class="pip" alt="" title="Click to swap with the big picture">
       <div class="ov tl">
-        <div class="seg" id="srcsel"><button type="button" data-src="cam" class="on">5MP</button><button type="button" data-src="color">D436 컬러</button><button type="button" data-src="depth">D436 깊이</button></div>
-        <button id="d436pwr" type="button">D436 끄기</button>
+        <div class="seg" id="srcsel"><button type="button" data-src="cam" class="on">5MP</button><button type="button" data-src="color">D436 Color</button><button type="button" data-src="depth">D436 Depth</button></div>
+        <button id="d436pwr" type="button">D436 Off</button>
         <span id="v-cam" class="chip mono">--</span><span id="v-pt" class="chip mono">PAN -- · TILT --</span>
       </div>
-      <div class="ov tr"><button id="vtoggle" type="button">전체 영상 끄기</button></div>
+      <div class="ov tr"><button id="vtoggle" type="button">All video off</button></div>
       <div class="ov bl"><span id="v-spd" class="chip mono">L -- · R --</span><span id="v-time" class="chip mono">--</span></div>
     </div>
-    <div id="b-estop" class="banner red">비상 정지 중 — 해제 버튼을 누르면 다시 움직입니다.</div>
-    <div id="b-disabled" class="banner amber">주행 잠김 — 서버가 텔레메트리 전용으로 떠 있습니다.</div>
-    <div id="b-bat" class="banner red">배터리 9.6 V 미만 — 주행이 거부됩니다.</div>
+    <div id="b-estop" class="banner red">Emergency stop latched — press Reset E-stop to drive again.</div>
+    <div id="b-disabled" class="banner amber">Driving locked — the server is running telemetry-only.</div>
+    <div id="b-bat" class="banner red">Battery below 9.6 V — driving refused.</div>
   </section>
   <aside class="side">
     <div class="card">
-      <div class="title">운전 <small class="mono">WASD · 누르는 동안</small></div>
+      <div class="title">Drive</div>
       <div class="keys">
         <div></div><div class="key" data-k="w">W</div><div></div>
         <div class="key" data-k="a">A</div><div class="key" data-k="s">S</div><div class="key" data-k="d">D</div>
       </div>
       <div class="grid mono">
-        <span>요청</span><span id="req">0.00 / 0.00</span>
+        <span>Request</span><span id="req">0.00 / 0.00</span>
         <span>PWM</span><span id="pwm">0 / 0</span>
-        <span>상태</span><span id="reason">--</span>
+        <span>State</span><span id="reason">--</span>
       </div>
-      <label for="cap" class="title">속도 상한 <small class="mono" id="capv">--</small></label>
+      <label for="cap" class="title">Speed cap <small class="mono" id="capv">--</small></label>
       <input id="cap" type="range" min="0" max="120" step="5" value="80">
     </div>
     <div class="card">
-      <div class="title">머리 <small class="mono">방향키 · 누르는 동안</small></div>
+      <div class="title">Head</div>
       <div class="pad" id="pad"><div class="vl"></div><div class="hl"></div><div class="tgt" id="tgt"></div><div class="dot" id="dot"></div></div>
       <div class="grid mono">
-        <span>목표</span><span id="h-tgt">0.0° / 0.0°</span>
-        <span>실제</span><span id="h-act">--</span>
-        <span>범위</span><span id="h-lim">--</span>
+        <span>Target</span><span id="h-tgt">0.0° / 0.0°</span>
+        <span>Actual</span><span id="h-act">--</span>
+        <span>Range</span><span id="h-lim">--</span>
       </div>
       <div class="arrows">
-        <div></div><button type="button" data-h="up" aria-label="위로">▲</button><div></div>
-        <button type="button" data-h="left" aria-label="왼쪽으로">◀</button><button type="button" id="center" aria-label="정면으로" style="font-size:12px">정면</button><button type="button" data-h="right" aria-label="오른쪽으로">▶</button>
-        <div></div><button type="button" data-h="down" aria-label="아래로">▼</button><div></div>
+        <div></div><button type="button" data-h="up" aria-label="Up">▲</button><div></div>
+        <button type="button" data-h="left" aria-label="Left">◀</button><button type="button" id="center" aria-label="Center" style="font-size:12px">Center</button><button type="button" data-h="right" aria-label="Right">▶</button>
+        <div></div><button type="button" data-h="down" aria-label="Down">▼</button><div></div>
       </div>
     </div>
     <div class="card">
-      <div class="title">상태 <small id="stamp" class="mono">--</small></div>
+      <div class="title">Status <small id="stamp" class="mono">--</small></div>
       <div class="grid mono">
-        <span>배터리</span><span id="t-bat" class="big">--</span>
-        <span>속도 L / R</span><span id="t-spd">--</span>
-        <span>거리 L / R</span><span id="t-od">--</span>
-        <span>팬 / 틸트</span><span id="t-pt">--</span>
-        <span>가속도</span><span id="t-acc">--</span>
-        <span>자이로</span><span id="t-gyr">--</span>
+        <span>Battery</span><span id="t-bat" class="big">--</span>
+        <span>Speed L / R</span><span id="t-spd">--</span>
+        <span>Odometry L / R</span><span id="t-od">--</span>
+        <span>Pan / Tilt</span><span id="t-pt">--</span>
+        <span>Accel (raw)</span><span id="t-acc">--</span>
+        <span>Gyro (raw)</span><span id="t-gyr">--</span>
         <span>UART</span><span id="t-fb">--</span>
       </div>
     </div>
@@ -244,7 +244,7 @@ input[type=range] { width:100%; accent-color:var(--accent); margin:0; }
   });
   $("vtoggle").addEventListener("click", () => {
     videoOn = !videoOn;
-    $("vtoggle").textContent = videoOn ? "전체 영상 끄기" : "전체 영상 켜기";
+    $("vtoggle").textContent = videoOn ? "All video off" : "All video on";
     videoAttach(videoOn && linkOk);
   });
 
@@ -279,17 +279,17 @@ input[type=range] { width:100%; accent-color:var(--accent); margin:0; }
     // A camera that comes back (service restart, cable re-seated) needs its <img> streams reopened.
     if ((wasUp.d436 === false && d.connected) || (wasUp.cam === false && c.ok)) { videoAttach(false); videoAttach(videoOn && linkOk); }
     wasUp.d436 = !!d.connected; wasUp.cam = !!c.ok;
-    chip($("c-d436"), standby ? "D436 대기" : d.connected ? "D436 " + fmt(d.fps, 0) + " fps" : "D436 off", standby ? "warn" : d.connected ? "ok" : "warn");
-    $("d436pwr").textContent = standby ? "D436 켜기" : "D436 끄기";
+    chip($("c-d436"), standby ? "D436 standby" : d.connected ? "D436 " + fmt(d.fps, 0) + " fps" : "D436 off", standby ? "warn" : d.connected ? "ok" : "warn");
+    $("d436pwr").textContent = standby ? "D436 On" : "D436 Off";
     document.querySelectorAll("#srcsel button").forEach((b) => { if (b.dataset.src !== "cam") b.classList.toggle("dim", standby); });
     $("pip").style.visibility = (standby && NEXT[main] !== "cam") ? "hidden" : "visible";   // no small D436 picture while it is off
     const mainOk = main === "cam" ? !!c.ok : !!d.connected;
     $("nocam").hidden = mainOk;
-    $("nocam").textContent = main === "cam" ? "5MP 카메라 없음" + (c.error ? " · " + c.error : "")
-      : standby ? "D436 대기 중 — 'D436 켜기'를 누르면 몇 초 뒤 나옵니다" : "D436 없음" + (d.error ? " · " + d.error : "");
+    $("nocam").textContent = main === "cam" ? "No 5MP camera" + (c.error ? " · " + c.error : "")
+      : standby ? "D436 is off — press 'D436 On'; the picture returns in a few seconds" : "No D436" + (d.error ? " · " + d.error : "");
     $("v-cam").textContent = main === "cam"
       ? "5MP " + (c.size || "") + (c.ok ? " · " + fmt(c.fps, 0) + " fps" : "")
-      : "D436 " + (main === "depth" ? "깊이 " : "컬러 ") + (d.size || "") + (d.connected ? " · " + fmt(d.fps, 0) + " fps · 유효 " + fmt((d.valid || 0) * 100, 0) + "% · 중앙 " + fmt(d.center_m, 2) + " m" : "");
+      : "D436 " + (main === "depth" ? "depth " : "color ") + (d.size || "") + (d.connected ? " · " + fmt(d.fps, 0) + " fps · valid " + fmt((d.valid || 0) * 100, 0) + "% · centre " + fmt(d.center_m, 2) + " m" : "");
     $("v-pt").textContent = "PAN " + fmt(fb.pan, 1) + "° · TILT " + fmt(fb.tilt, 1) + "°";
     $("v-spd").textContent = "L " + fmt(fb.L, 2) + " · R " + fmt(fb.R, 2) + " m/s";
     $("v-time").textContent = when ? when.toLocaleTimeString("sv-SE") : "--";
