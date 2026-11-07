@@ -81,7 +81,9 @@ class WakeTests(unittest.TestCase):
                  "Kalman, what time is it?": (True, "what time is it?"),
                  "my battery is low so Kalman": (False, ""),          # his own voice coming back
                  "Kalman is feeling sleepy": (False, ""),            # echo that happens to start with the name
-                 "How is the weather?": (False, ""), "": (False, "")}
+                 "How is the weather?": (True, "How is the weather?"),       # a real sentence over him
+                 "Tell me about the cat instead.": (True, "Tell me about the cat instead."),
+                 "Uh huh.": (False, ""), "Thank you.": (False, ""), "": (False, "")}
         for heard, want in cases.items():
             self.assertEqual(mind.barge_in(heard, speaking), want, heard)
 

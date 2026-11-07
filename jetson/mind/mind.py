@@ -84,13 +84,19 @@ def is_echo(heard, spoken, share=0.6):
     return not h or sum(w in s for w in h) / len(h) >= share
 
 
-def barge_in(heard, spoken):
-    """(True, rest) when `heard` is Paul interrupting; rest is what followed the name, if anything."""
-    if not INTERRUPT.match(heard or "") or is_echo(heard, spoken):
+def barge_in(heard, spoken, min_words=3):
+    """(True, rest) when `heard` is Paul cutting in: it is not mostly Kalman's own words, and it either
+    starts with the name or a stop word, or is a real sentence of `min_words`+ words (Paul just talking
+    over him, as voice agents allow). rest is the new request ('' for "stop", "Kalman" alone...)."""
+    if not is_speech(heard) or is_echo(heard, spoken):
         return False, ""
-    woke, rest = split_wake(heard)
-    keep = woke and is_speech(rest) and not INTERRUPT.match(rest) and not is_end(rest)   # "Kalman, stop." only stops
-    return True, (rest if keep else "")
+    if INTERRUPT.match(heard or ""):
+        woke, rest = split_wake(heard)
+        keep = woke and is_speech(rest) and not INTERRUPT.match(rest) and not is_end(rest)   # "Kalman, stop." only stops
+        return True, (rest if keep else "")
+    if len(words(heard)) >= min_words:
+        return True, heard.strip()
+    return False, ""
 
 
 def is_speech(text):
@@ -347,6 +353,8 @@ class Mind:
                 except Exception:
                     continue
                 cut, _ = barge_in(heard, spoken)
+                self.journal.write("while_speaking", text=heard, echo=is_echo(heard, spoken), cut=cut,
+                                   seconds=round(len(phrase) / 2 / RATE, 2))
                 if cut:
                     p.kill()
                     p.wait()
@@ -447,7 +455,7 @@ class Mind:
                 self.journal.write("interrupted", by=cut)
                 _, rest = barge_in(cut, "")
                 woke, _ = split_wake(cut)
-                if depth < 3 and (rest or woke):         # "Kalman, ..." gets an answer; "stop" just stops
+                if depth < 3 and (rest or woke):         # "Kalman, ..." or a sentence gets an answer; "stop" just stops
                     self.speaking = False
                     self.turn("interrupt", frames, called=cut, question=rest, depth=depth + 1, interrupted=True)
         finally:
