@@ -4,9 +4,11 @@
   microphone (arecord) -> wake -> record until silence -> Whisper (rover-stt) -> LLM on the Mac mini
   (rover-brainlink) -> Supertonic sentence by sentence (rover-tts-st) -> speaker (aplay), half-duplex
 
-Wake: sherpa-onnx keyword spotting ("HEY KALMAN", English zipformer, no training) or POST /listen on
-the local control port. End of speech: Silero VAD (through sherpa-onnx). Every step is written to a
-day-file JSONL journal. Runs with host networking so all services are on the Jetson's loopback
+Wake (Paul's choice, 2026-11-07): Silero VAD cuts every spoken phrase out of the microphone stream and
+Whisper, given the name as a prompt, transcribes it; a phrase that starts with "Kalman" wakes Kalman, and
+any words after the name are taken as the question at once. Phrases without the name are dropped
+unrecorded (only counted). POST /listen on the local control port also wakes it. Every turn is written
+to a day-file JSONL journal. Runs with host networking so all services are on the Jetson's loopback
 (jetson/mind/README.md).
 """
 import argparse
@@ -35,6 +37,17 @@ WHISPER_PROMPT = "Kalman is a small robot. Hey Kalman."   # name-only hint measu
 # Lines Whisper is known to invent from short noise (YouTube-caption endings); seen on the rover 2026-11-07.
 INVENTED = re.compile(r"^\W*(thank(s| you)( so much| very much)?( for (watching|listening)\b.*)?|please subscribe.*|"
                       r"subscribe.*|you|bye|\.+)\W*$", re.I)
+
+
+NAME = re.compile(r"^\W*(?:(?:hey|hi|hello|ok|okay|yo)\W+)?kalman\b\W*", re.I)
+
+
+def split_wake(text):
+    """(True, rest) when the phrase starts with the name, optionally after a greeting; rest is what
+    followed the name ('' if nothing). The general detector heard Paul's "Kalman" as "common"
+    (docs/verify.md); Whisper with the name prompt wrote it right on every real call."""
+    m = NAME.match(text or "")
+    return (True, text[m.end():].strip()) if m else (False, "")
 
 
 def is_speech(text):
@@ -94,36 +107,39 @@ def make_vad(model, silence_s=0.7):
     return sherpa_onnx.VoiceActivityDetector(cfg, buffer_size_in_seconds=30)
 
 
-class Spotter:
-    """'Hey Kalman' keyword spotting: sherpa-onnx streaming zipformer with a text keyword list."""
+class SpeechGate:
+    """Cuts phrases out of the continuous stream: from a little before the VAD hears speech until it
+    closes the segment. Returns the phrase's PCM when it ends, else None. Phrases shorter than
+    `min_s` (clicks, coughs) and longer than `max_s` (TV monologue) are dropped."""
 
-    def __init__(self, model_dir, keywords, score=1.5, threshold=0.25):
-        import sherpa_onnx
-        d = model_dir
-        tokens, bpe = os.path.join(d, "tokens.txt"), os.path.join(d, "bpe.model")
-        kw_file = "/tmp/keywords.txt"
-        encoded = sherpa_onnx.text2token([k.upper() for k in keywords], tokens=tokens, tokens_type="bpe", bpe_model=bpe)
-        with open(kw_file, "w") as f:
-            for raw, toks in zip(keywords, encoded):
-                f.write(" ".join(toks) + f" @{raw.upper().replace(' ', '_')}\n")
-        self.kws = sherpa_onnx.KeywordSpotter(
-            tokens=tokens, encoder=os.path.join(d, "encoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx"),
-            decoder=os.path.join(d, "decoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx"),
-            joiner=os.path.join(d, "joiner-epoch-12-avg-2-chunk-16-left-64.int8.onnx"),
-            num_threads=1, keywords_file=kw_file, keywords_score=score, keywords_threshold=threshold, provider="cpu")
-        self.stream = self.kws.create_stream()
+    def __init__(self, vad, pre_s=0.4, min_s=0.4, max_s=10.0):
+        self.vad = vad
+        self.vad.reset()
+        self.pre = deque(maxlen=int(pre_s * RATE / FRAME))
+        self.min_frames, self.max_frames = int(min_s * RATE / FRAME), int(max_s * RATE / FRAME)
+        self.frames = None
 
     def feed(self, frame):
-        """Returns the keyword heard, or ''."""
-        self.stream.accept_waveform(RATE, floats(frame))
-        hit = ""
-        while self.kws.is_ready(self.stream):
-            self.kws.decode_stream(self.stream)
-            r = self.kws.get_result(self.stream)
-            if r:
-                hit = r
-                self.kws.reset_stream(self.stream)
-        return hit
+        self.vad.accept_waveform(floats(frame))
+        if self.frames is None:
+            self.pre.append(frame)
+            if self.vad.is_speech_detected():
+                self.frames = list(self.pre)
+            return None
+        self.frames.append(frame)
+        closed = False
+        while not self.vad.empty():
+            self.vad.pop()
+            closed = True
+        if closed or len(self.frames) >= self.max_frames:
+            pcm, n = b"".join(self.frames), len(self.frames)
+            self.frames = None
+            self.pre.clear()
+            if not closed:
+                self.vad.reset()
+                return None
+            return pcm if n >= self.min_frames else None
+        return None
 
 
 def wav_bytes(pcm, rate=RATE):
@@ -204,11 +220,11 @@ class Mind:
         self.journal = Journal(args.journal)
         self.wake = threading.Event()
         self.vad = make_vad(args.vad_model)
-        self.spotter = Spotter(args.kws_dir, args.keywords, args.kws_score, args.kws_threshold) if args.kws_dir else None
+        self.gate_vad = make_vad(args.vad_model, silence_s=0.4)
+        self.counts = {"phrases": 0, "whisper_ms": 0, "wakes": 0}   # for the TV test: how often Whisper ran
         self.state = "starting"
         self.speaking = False
         self.recent = deque(maxlen=int(1.0 * RATE / FRAME))     # pre-roll and noise level
-        self.ring = deque(maxlen=int(90.0 * RATE / FRAME))      # last 90 s, only for POST /dump (wake tuning)
         self.history = deque(maxlen=6)                           # last turns for context
 
     # --- services -------------------------------------------------------------------------
@@ -246,32 +262,37 @@ class Mind:
         return False
 
     # --- one turn -------------------------------------------------------------------------
-    def turn(self, source, frames, keyword=""):
-        # The microphone keeps recording while the beep plays, so the frames queued during the beep
-        # (plus a margin for the speaker's own latency) are dropped; otherwise the beep reads as speech.
-        t_beep = time.monotonic()
-        self.play(tone())
-        for _ in range(int((time.monotonic() - t_beep + 0.15) * RATE / FRAME)):
-            next(frames)
-        t0 = time.monotonic()
-        self.journal.write("wake", source=source, keyword=keyword)
-        seg = Endpointer(self.vad)
-        pcm = None
-        for frame in frames:
-            done, pcm = seg.feed(frame)
-            if done:
-                break
-        if not pcm:
-            self.journal.write("heard", text="", ms=round((time.monotonic() - t0) * 1000), note="no speech")
-            return
-        t1 = time.monotonic()
-        try:
-            heard = self.transcribe(pcm)
-        except Exception as e:
-            self.journal.write("error", where="stt", error=str(e))
-            return
-        self.journal.write("heard", text=heard, lang=self.a.language, seconds=round(len(pcm) / 2 / RATE, 2),
-                           ms=round((time.monotonic() - t1) * 1000))
+    def turn(self, source, frames, called="", question=""):
+        """One exchange. With `question` (said in the same breath as the name) Kalman answers at once;
+        otherwise it beeps and records the question."""
+        self.journal.write("wake", source=source, heard=called)
+        if question:
+            heard = question
+        else:
+            # The microphone keeps recording while the beep plays, so the frames queued during the beep
+            # (plus a margin for the speaker's own latency) are dropped; otherwise the beep reads as speech.
+            t_beep = time.monotonic()
+            self.play(tone())
+            for _ in range(int((time.monotonic() - t_beep + 0.15) * RATE / FRAME)):
+                next(frames)
+            t0 = time.monotonic()
+            seg = Endpointer(self.vad)
+            pcm = None
+            for frame in frames:
+                done, pcm = seg.feed(frame)
+                if done:
+                    break
+            if not pcm:
+                self.journal.write("heard", text="", ms=round((time.monotonic() - t0) * 1000), note="no speech")
+                return
+            t1 = time.monotonic()
+            try:
+                heard = self.transcribe(pcm)
+            except Exception as e:
+                self.journal.write("error", where="stt", error=str(e))
+                return
+            self.journal.write("heard", text=heard, lang=self.a.language, seconds=round(len(pcm) / 2 / RATE, 2),
+                               ms=round((time.monotonic() - t1) * 1000))
         if not is_speech(heard):
             self.journal.write("ignored", text=heard)
             return
@@ -315,24 +336,37 @@ class Mind:
     def run(self):
         self.journal.write("start", mic=self.a.mic, speaker=self.a.speaker, llm=self.a.llm, model=self.a.model_name)
         src = self.frames()
+        gate = SpeechGate(self.gate_vad)
         self.state = "listening"
         for frame in src:
-            self.ring.append(frame)
             if self.speaking:
                 continue                       # half-duplex: ignore our own voice
             self.recent.append(frame)
-            keyword = self.spotter.feed(frame) if self.spotter else ""
-            if keyword or self.wake.is_set():
-                source = "keyword" if keyword else "button"
+            woke, called, question, source = False, "", "", "button"
+            phrase = gate.feed(frame)
+            if phrase:
+                t = time.monotonic()
+                try:
+                    called = self.transcribe(phrase)
+                except Exception as e:
+                    self.journal.write("error", where="stt", error=str(e))
+                    called = ""
+                self.counts["phrases"] += 1
+                self.counts["whisper_ms"] += round((time.monotonic() - t) * 1000)
+                woke, question = split_wake(called)
+                if woke:
+                    source = "name"
+                    question = question if is_speech(question) else ""
+            if woke or self.wake.is_set():
                 self.wake.clear()
+                self.counts["wakes"] += 1
                 self.state = "turn"
                 try:
-                    self.turn(source, src, keyword)
+                    self.turn(source, src, called if woke else "", question)
                 except Exception as e:
                     self.journal.write("error", where="turn", error=str(e))
                 self.recent.clear()
-                if self.spotter:
-                    self.spotter.kws.reset_stream(self.spotter.stream)
+                gate = SpeechGate(self.gate_vad)
                 self.state = "listening"
 
 
@@ -350,14 +384,9 @@ def control_server(mind, port):
             self.wfile.write(body)
 
         def do_GET(self):
-            self._json(200, {"state": mind.state}) if self.path == "/state" else self._json(404, {"error": "not found"})
+            self._json(200, {"state": mind.state, **mind.counts}) if self.path == "/state" else self._json(404, {"error": "not found"})
 
         def do_POST(self):
-            if self.path == "/dump":           # wake tuning only: the last 90 s as a WAV next to the journal
-                path = os.path.join(mind.a.journal, "debug-%s.wav" % datetime.now().strftime("%H%M%S"))
-                with open(path, "wb") as f:
-                    f.write(wav_bytes(b"".join(list(mind.ring))))
-                return self._json(200, {"result": "ok", "path": path})
             if self.path != "/listen":
                 return self._json(404, {"error": "not found"})
             if mind.state != "listening":
@@ -384,13 +413,6 @@ def main():
     ap.add_argument("--voice-dir", default="/voice")
     ap.add_argument("--port", type=int, default=8096)
     ap.add_argument("--vad-model", default="/models/sherpa/silero_vad.onnx")
-    ap.add_argument("--kws-dir", default="/models/sherpa/sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01",
-                    help="'' to wake only by POST /listen")
-    # The English model hears Paul's "Kalman" as "common" (2026-11-07 live calls), so the near spellings
-    # are listed too; they map to the same wake.
-    ap.add_argument("--keywords", nargs="+", default=["HEY KALMAN", "HEY COMMON", "HEY CALMAN", "HEY CARMEN"])
-    ap.add_argument("--kws-score", type=float, default=2.0, help="keyword boost; higher wakes more easily")
-    ap.add_argument("--kws-threshold", type=float, default=0.15, help="trigger threshold; lower wakes more easily")
     args = ap.parse_args()
     mind = Mind(args)
     control_server(mind, args.port)

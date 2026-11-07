@@ -310,6 +310,7 @@ Compared on the Jetson with clocks locked (`docs/verify.md`): YOLO26n 3.6 ms / ~
 
 - **Kalman** (칼만 in Korean), wake phrase **Hey Kalman** (헤이 칼만). Used in the LLM system prompt and the console header.
 - Why: the first name came from the film, and in the 2026-11-07 microphone test Whisper wrote it differently every time (`Wally`, `Orley`, `Whirly`). Kalman has a clear first consonant, is rare in everyday speech, and is the filter at the centre of this project. Alan and Markov were the other candidates: Alan is common and soft, Markov means a memoryless process. Whether the phrase works as a wake word is still to be measured with the detector.
+- Wake method (Paul, 2026-11-07): no separate wake-word model for now. Silero VAD cuts phrases and Whisper with the name as a prompt checks for "Kalman" at the start; it found all 8 of Paul's real calls while the general keyword spotter found none, and Paul accepts that "Calvin" and "Carmen" also wake it (`docs/verify.md`). A model trained on his voice stays the fallback if a TV test fails.
 - History: the robot was called Wall-E (월리) from 2026-11-06 to 2026-11-07, with `Hey Wall-E` as the wake phrase for part of a day, after the `Hey Jetson` working phrase. Older dated entries keep the old name.
 
 ## The rover's LLM runs on the home Mac mini, reached by a rover-side tunnel (2026-11-07, DECIDED by Paul)

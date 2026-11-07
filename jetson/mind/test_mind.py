@@ -65,6 +65,29 @@ class EndpointerTests(unittest.TestCase):
         self.assertEqual(mind.floats(array.array("h", [16384, -32768]).tobytes()), [0.5, -1.0])
 
 
+class WakeTests(unittest.TestCase):
+    def test_name_at_the_start_wakes(self):
+        cases = {"Hey Kalman.": (True, ""), " Hey Kalman, what time is it?": (True, "what time is it?"),
+                 "Kalman.": (True, ""), "OK Kalman stop": (True, "stop"), "hey, kalman, how's your battery?": (True, "how's your battery?"),
+                 "How is the weather?": (False, ""), "I told Kalman yesterday.": (False, ""), "Hey Google.": (False, ""),
+                 "Hey Kalmanson": (False, ""), "": (False, "")}
+        for text, want in cases.items():
+            self.assertEqual(mind.split_wake(text), want, text)
+
+    def test_gate_cuts_a_phrase_with_pre_roll(self):
+        gate = mind.SpeechGate(FakeVad(quiet_needed=5), pre_s=0.09, min_s=0.2)
+        quiet, loud = frame(300), frame(6000)
+        out = [gate.feed(f) for f in [quiet] * 6 + [loud] * 10 + [quiet] * 5]
+        got = [o for o in out if o]
+        self.assertEqual(len(got), 1)
+        self.assertEqual(len(got[0]), (2 + 10 + 5) * mind.FRAME * 2)   # 3 pre-roll frames minus the one VAD saw as speech
+
+    def test_gate_drops_clicks(self):
+        gate = mind.SpeechGate(FakeVad(quiet_needed=2), pre_s=0.03, min_s=0.4)
+        out = [gate.feed(f) for f in [frame(300)] * 3 + [frame(6000)] + [frame(300)] * 4]
+        self.assertFalse(any(out))
+
+
 class TextTests(unittest.TestCase):
     def test_sentences_stream_out_as_they_end(self):
         pieces = ["Hmm. I", " don't know", "! Maybe the", " cat? ", "No"]

@@ -5,10 +5,15 @@ rover microphone, wake, record until the speaker stops, transcribe with Whisper 
 prompt), ask the LLM on the Mac mini (`rover-brainlink`), speak the reply sentence by sentence with
 Supertonic (`rover-tts-st`) on the rover speaker, and journal every step.
 
-Wake: until the `Hey Kalman` detector exists, a POST to the local control port wakes it:
+Wake (Paul's choice 2026-11-07): Silero VAD cuts each spoken phrase out of the stream, Whisper
+transcribes it with the name as a prompt, and a phrase that starts with "Kalman" (optionally after
+hey / hi / ok) wakes it. "Hey Kalman, what time is it?" is answered at once; "Hey Kalman" alone gets a
+beep and then the question. Phrases without the name are dropped without being stored; `/state` only
+counts them (`phrases`, `whisper_ms`, `wakes`). Known cost: names that sound alike ("Calvin",
+"Carmen") also wake it, and Whisper runs on every phrase anyone in the room says (`docs/verify.md`).
 
 ```
-curl -X POST http://127.0.0.1:8096/listen     # on the Jetson; a short beep means "speak now"
+curl -X POST http://127.0.0.1:8096/listen     # on the Jetson: wake without the name
 curl http://127.0.0.1:8096/state
 ```
 
