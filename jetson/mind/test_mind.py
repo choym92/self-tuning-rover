@@ -94,6 +94,12 @@ class WakeTests(unittest.TestCase):
         for _ in range(40):                     # alone: mic hears 0.5 x playback
             self.assertFalse(dt.feed(2000.0))
         self.assertAlmostEqual(dt.gain, 0.5, places=2)
+        for _ in range(200):                    # quiet stretches in his own speech must not drag it down
+            dt.feed(800.0)
+        dt.reset(env)
+        for _ in range(40):
+            dt.feed(2000.0)
+        self.assertGreaterEqual(dt.gain, 0.5)
         self.assertFalse(dt.feed(3000.0))       # a little louder: not enough
         hits = [dt.feed(6000.0) for _ in range(3)]   # Paul over him: 3x the echo for 3 frames
         self.assertEqual(hits, [False, False, True])
@@ -111,6 +117,12 @@ class WakeTests(unittest.TestCase):
         dt.reset([4000.0] * 40)
         self.assertFalse(any(dt.feed(100.0) for _ in range(dt.warm)))   # silence before the echo arrives
         self.assertIsNone(dt.gain)                                      # nothing learned from it
+
+    def test_strip_echo(self):
+        spoken = "Yeah, I do. The cat walks past a lot."
+        self.assertEqual(mind.strip_echo("Yeah.", spoken), "")
+        self.assertEqual(mind.strip_echo("Yeah, I do. What time is it?", spoken), "What time is it?")
+        self.assertEqual(mind.strip_echo("Stop talking about the cat", spoken), "Stop talking about the cat")
 
     def test_envelope_of_a_wav(self):
         env = mind.play_envelope(mind.tone(seconds=0.3))

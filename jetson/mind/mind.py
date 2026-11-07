@@ -105,13 +105,26 @@ class DoubleTalk:
     pipe latency do not matter) times the speaker-to-mic gain, which is learned while Kalman speaks alone.
     Louder than `ratio` x that for `hold_s` means someone else is making sound."""
 
-    def __init__(self, ratio=2.0, hold_s=0.2, lag_s=0.5, min_level=900.0, gain=None, warm_s=0.3):
+    def __init__(self, ratio=2.0, hold_s=0.3, lag_s=0.5, min_level=900.0, gain=None, warm_s=0.3, keep_s=8.0):
         self.ratio, self.min_level = ratio, min_level
         self.warm = int(warm_s * RATE / FRAME)   # playback start: the echo has not reached the mic yet
         self.hold = int(hold_s * RATE / FRAME)
         self.lag = int(lag_s * RATE / FRAME)
-        self.gain = gain                       # echo level per unit of playback level; None until learned
+        self.fixed = gain                      # tests may pin the gain
+        self.ratios = deque(maxlen=int(keep_s * RATE / FRAME))
         self.reset([])
+
+    @property
+    def gain(self):
+        """Echo level per unit of playback level: the 90th percentile of every ratio seen while Kalman
+        speaks (all frames, so the estimate cannot drift down the way a "learn only when quiet" rule did
+        on 2026-11-07, when it fell from 0.55 to 0.29 and Kalman began cutting himself off)."""
+        if self.fixed is not None:
+            return self.fixed
+        if len(self.ratios) < 15:
+            return None
+        r = sorted(self.ratios)
+        return r[int(0.9 * (len(r) - 1))]
 
     def reset(self, play_env):
         self.env, self.i, self.run = play_env, 0, 0
@@ -123,12 +136,12 @@ class DoubleTalk:
         if self.i <= self.warm:
             return False
         ref = max(window) if window else 0.0
-        expected = (self.gain or 0.0) * ref
-        loud = self.gain is not None and mic_level > max(self.ratio * expected, self.min_level)
+        g = self.gain
+        expected = (g or 0.0) * ref
+        loud = g is not None and mic_level > max(self.ratio * expected, self.min_level)
         self.run = self.run + 1 if loud else 0
-        if not loud and ref > 500 and mic_level > 0:      # learn the echo gain while Kalman talks alone
-            g = mic_level / ref
-            self.gain = g if self.gain is None else 0.95 * self.gain + 0.05 * min(g, 4 * self.gain)
+        if ref > 500:
+            self.ratios.append(mic_level / ref)
         return self.run >= self.hold
 
 
@@ -141,6 +154,16 @@ def play_envelope(wav):
         a = a[::ch]
     step = max(1, int(rate * FRAME / RATE))
     return [math.sqrt(sum(x * x for x in a[i:i + step]) / step) for i in range(0, len(a) - step + 1, step)]
+
+
+def strip_echo(heard, spoken):
+    """Drop the leading words that are Kalman's own (the tail of his voice recorded around the cut)."""
+    toks = (heard or "").split()
+    own = set(words(spoken))
+    i = 0
+    while i < len(toks) and (not words(toks[i]) or all(w in own for w in words(toks[i]))):
+        i += 1
+    return " ".join(toks[i:])
 
 
 def is_speech(text):
@@ -495,7 +518,8 @@ class Mind:
                         break
                     if first is None:
                         first = round((time.monotonic() - t2) * 1000)
-                    cut = self.play_listening(wav, frames, bgate, " ".join(said + [sentence]))
+                    spoken_now = " ".join(said + [sentence])
+                    cut = self.play_listening(wav, frames, bgate, spoken_now)
                     said.append(sentence)
                     if cut:
                         stop.set()
@@ -524,9 +548,12 @@ class Mind:
                         said_now = self.transcribe(pcm)
                     except Exception as e:
                         self.journal.write("error", where="stt", error=str(e))
-                self.journal.write("interrupted", by="sound", heard=said_now)
-                woke, rest = split_wake(said_now)
-                question = rest if woke else said_now
+                own_removed = strip_echo(said_now, spoken_now)
+                self.journal.write("interrupted", by="sound", heard=said_now, kept=own_removed)
+                woke, rest = split_wake(own_removed)
+                question = rest if woke else own_removed
+                if len(words(question)) < 2:               # nothing but his own voice or a grunt: just stop
+                    question = ""
                 if depth < 3 and is_speech(question) and not is_end(question) and not INTERRUPT.match(question):
                     self.speaking = False
                     self.turn("interrupt", frames, called=said_now, question=question, depth=depth + 1, interrupted=True)
