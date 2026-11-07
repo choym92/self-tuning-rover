@@ -392,3 +392,21 @@ Purpose: size the rover battery and charger before buying the Waveshare UGV Rove
 - Vision loop alone ran at 11.6 fps (detector median 36 ms, p90 125 ms); with Gemma running it reported 16.2 fps (detector median 43 ms, p90 46 ms). Both are below the 28.7 fps recorded on 2026-10-03 with clocks locked and the person class only; this run used `--all-classes`, unlocked clocks, and kept all six CPU cores near 90% at 1728 MHz. The cause of the lower and run-to-run variable frame rate was not investigated. No owner face was found in either run (the people in view were close and turned away), so face recognition contributed little.
 - Gemma generated at 21.3-21.9 tokens/s while the vision loop ran and 28.0 tokens/s alone (256-token answers).
 - INFERENCE: VDD_IN is the module input rail. The carrier board, the D436 and other USB devices are not included, so the draw at the DC jack is higher by an amount not measured here (a USB-C/DC inline meter would measure it).
+
+## Control console stage 1, 5 MP camera and microphones (2026-11-06, Jetson on the rover)
+
+- `jetson/control/server.py` ran in the `l4t-jetpack:r36.4.0` container with `/dev/ttyTHS1` (PIO boot entry) in telemetry-only mode: T:1001 at 19.5 Hz, feedback age 0.03 s, clock reported synchronised through `/run/systemd/timesync/synchronized`, page served (10.9 kB), `POST /api/drive` answered 403 `disabled` and the UART send counter stayed at 0. Reachable from the Mac through `ssh -L 8091:127.0.0.1:8091`. 11 unit tests pass on the Mac (`python3 -B -m unittest discover -s jetson/control`). No motor command was sent by the server.
+- 5 MP camera (`/dev/video0`, OpenCV V4L2, MJPG): 2592x1944, 1920x1080, 1280x720 and 640x480 all delivered 20.0 fps over 2 s windows; a 1280x720 frame was saved and viewed (fisheye, sharp, well exposed indoors). The frame stays off the repository.
+- Microphones, 3 s each, 16 kHz mono through `plughw`: the camera's built-in microphone (card 0) gave RMS 559 / peak 4832 (-35 dBFS) in a quiet room; the audio board (card 1, "USB PnP Audio Device") gave RMS 2 / peak 8, and at its native 48 kHz stereo RMS 6 and 3 per channel, with `Mic Capture Switch` on and capture volume 92%. INFERENCE: the board is not routing its onboard microphones to this input; the product photo shows a small switch labelled for an earphone microphone next to the onboard pair, so the selector may be on the wrong side. To check with the top plate off.
+
+## On-robot text-to-speech: Kokoro-82M through kokoro-onnx on the CPU (2026-11-06, Jetson, Whisper + Gemma + console running)
+
+Container `rover/kokoro:0.6.1` (`jetson/tts/`, python:3.11-slim + kokoro-onnx 0.6.1 + espeak-ng), model files in `/home/paulcho/models/kokoro`, voice `af_heart`, 24 kHz mono, played with `aplay -D plughw:1,0`.
+
+| Model file | Loads | Synthesis for a ~5.5 s sentence | Container RSS | Note |
+|---|---|---|---|---|
+| kokoro-v1.0.int8.onnx (114 MB) | 2.6 s | 1.5-2.3 s | 414 MiB | Paul: natural but the sound quality is a little thin |
+| kokoro-v1.0.fp16.onnx (164 MB) | 2.8 s | fails: empty output ("zero-size array"); onnxruntime has no CPU kernels for its fp16 nodes | 530 MiB | GPU-only on CPU runtimes |
+| kokoro-v1.0.onnx fp32 (326 MB) | 2.3 s | 3.3 s | 527 MiB | chosen by Paul |
+
+Raw Kokoro output peaks near -9 dBFS; the server now normalises to -1 dBFS (the speaker mixer has no gain above 0 dB). System memory with Gemma, Whisper, the console server and fp32 Kokoro: about 6.0 GB used, 1.4 GB available. A full spoken turn from typed text: Gemma 1.1-1.2 s, speech 3.3 s plus playback. Camera microphone to Whisper is wired but not yet exercised with Paul speaking.

@@ -258,3 +258,15 @@ Compared on the Jetson with clocks locked (`docs/verify.md`): YOLO26n 3.6 ms / ~
 - Runs as TensorRT FP16 engines (`trt_engine.py`), with embeddings identical to onnxruntime (cosine 1.0000); this cut GPU use from 53% to 31% and system RAM by about 0.8 GB in the live loop (`docs/verify.md`).
 - Next: re-enroll from the robot's real camera height (~30 cm on the UGV pan-tilt) once the kit arrives; add multi-frame voting before the robot acts on the label.
 
+
+## On-robot voice output: Kokoro-82M fp32 on the CPU (2026-11-06, DECIDED by Paul)
+
+- Engine `kokoro-onnx` 0.6.1 in its own container (`jetson/tts/`), model `kokoro-v1.0.onnx` (fp32, Apache-2.0 weights, MIT runtime), voice `af_heart`, CPU only. Paul picked fp32 over int8 for sound quality after hearing both (`docs/verify.md`).
+- Why Kokoro: among models light enough to run next to Gemma and Whisper on the 8 GB board it has the best measured quality in 2026 CPU benchmarks (UTMOS 4.44, ahead of Supertonic 3 at 4.32 and Pocket TTS at 4.10); larger open models and cloud voices sound better but do not fit the board or need the internet.
+- Accepted costs: about 3.3 s to synthesise a sentence on the CPU (GPU onnxruntime would cut this, at the cost of a JetPack-based image and sharing the GPU with the LLM); about 0.5 GB of RAM; the small rover speaker limits the result.
+- Alternatives kept in mind: Supertonic 3 (2.7x faster, slightly lower quality, OpenRAIL-M use restrictions and an archived repository per one review), Pocket TTS (voice cloning from 5 s of audio), a larger model on the home Mac mini over the network, macOS `say` (`talk.py --tts mac`).
+
+## Console control server owns the UART (2026-11-06, DECIDED)
+
+- One process on the Jetson (`jetson/control/server.py`) opens `/dev/ttyTHS1`, enforces the safety rules (command expiry 0.3 s, latched emergency stop, PWM cap, low-voltage refusal, head limits) and exposes a loopback HTTP API; the Mac page reaches it through an SSH tunnel. Scripts that need the ESP32 go through this server rather than opening the port themselves.
+- Emergency stop uses PWM 0 plus a T:1 zero-speed hold, not T:0, because T:0 in this firmware also releases torque on every bus servo and would let the pan-tilt head drop.

@@ -85,11 +85,18 @@ Next steps:
   it was not plugged in on 2026-11-06. Cells: 3 × Molicel P30B.
 - Jetson on the rover: WiFi the home 2.4 GHz network, last seen at `192.168.1.238` (DHCP); USB-C
   fallback `192.168.55.1`. The Ethernet port is physically blocked.
-- UART: RX works only when the boot menu entry `uart-pio` (key 1) is picked; `DEFAULT` is
-  still `primary`, which has the DMA bug (`docs/preflight.md`). TX passed with T:131.
-- ESP32 set to UGV Rover with pan-tilt by T:900 on 2026-11-06. Next: confirm `s 22` on the
-  OLED and after a power cycle, soak the UART under vision load, choose the boot DEFAULT,
-  then wheel direction with T:11, wheels off the ground.
+- UART: `DEFAULT uart-pio` (PIO) fixes RX and TX; `primary` still has the DMA bug and a
+  kernel update resets DEFAULT to it (`docs/preflight.md`).
+- ESP32 set to UGV Rover with pan-tilt (`s 22`, seen on the OLED). Forward drive, pan-tilt and
+  the boot default `uart-pio` passed first tests (`docs/setup-log.md`, `docs/preflight.md`).
+- Control console (`jetson/control/`): keyboard driving, emergency stop and pan-tilt work from the
+  Mac page; one unexplained lingering drive request on 2026-11-06 (`docs/setup-log.md`), so a
+  continuous-drive time limit is the next safety item. Camera 20 fps at every mode; the audio
+  board microphone reads silence (cause not found; the camera microphone is used instead).
+- Voice: speaker works; `jetson/voice/talk.py` runs one spoken English turn (Whisper, Gemma with
+  thinking off, Kokoro fp32 in `jetson/tts/`). Paul speaking to the robot is still to be tried.
+- Pending: D436 USB cable, UART soak under vision load, memory plan once vision returns
+  (Gemma + Whisper + Kokoro already use about 6 GB).
 - Final microphone: not purchased. Test the Waveshare audio board first; the
   planned fallback is a Seeed reSpeaker XVF3800 USB four-mic array.
 
