@@ -25,6 +25,7 @@ Contents (search these headings first; open only the section you need):
 - [Audio8 TTS Preview 0.1B (ONNX INT8) against Supertonic 3 on the Jetson CPU (2026-11-07)](#audio8-tts-preview-01b-onnx-int8-against-supertonic-3-on-the-jetson-cpu-2026-11-07)
 - [Console stage 2: camera view in the page, D436 connected on the rover (2026-11-07, Jetson on the rover)](#console-stage-2-camera-view-in-the-page-d436-connected-on-the-rover-2026-11-07-jetson-on-the-rover)
 - [Eyes service: D436 colour and depth in the console page (2026-11-07, Jetson on the rover)](#eyes-service-d436-colour-and-depth-in-the-console-page-2026-11-07-jetson-on-the-rover)
+- [Wake phrase "Hey Kalman" with sherpa-onnx keyword spotting (2026-11-07, rover microphone)](#wake-phrase-hey-kalman-with-sherpa-onnx-keyword-spotting-2026-11-07-rover-microphone)
 - [Gemma on the Mac mini (Metal) against the Jetson (2026-11-07)](#gemma-on-the-mac-mini-metal-against-the-jetson-2026-11-07)
 - [Rover microphone and Whisper: can it understand Paul? (2026-11-07, Jetson on the rover)](#rover-microphone-and-whisper-can-it-understand-paul-2026-11-07-jetson-on-the-rover)
 - [Pan-tilt settle correction (2026-11-07, Jetson on the rover)](#pan-tilt-settle-correction-2026-11-07-jetson-on-the-rover)
@@ -537,6 +538,30 @@ samples, 73 MiB; 5 MP big + D436 colour small at 5 fps 23%. Camera standby (`POS
 the first frame and the stream was back at 30 fps 3 s later. The eyes container restarts in 3 s. The tilt bracket shows
 as the black lower-right region in both D436 views. The page's three-source selector and the small
 picture were checked in the built-in browser; 17 unit tests pass on the Mac (15 control, 2 eyes).
+
+## Wake phrase "Hey Kalman" with sherpa-onnx keyword spotting (2026-11-07, rover microphone)
+
+Engine: sherpa-onnx 2.0.1 keyword spotting, English zipformer
+`sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01` (int8), no training; CPU about 0.06 s per audio
+second in the `rover-mind` container. On the model's own test recordings it found all three listed
+keywords.
+
+On Paul's voice (camera microphone, `jetson/voice/wake_record.py --quick`, 33 clips of 2.5 s): six of
+the fifteen "Hey Kalman" clips hold no speech above the room level (Whisper: `[BLANK_AUDIO]`; cause not
+established, probably timing in the first groups), and two start at 0.0 s (start possibly clipped).
+
+| Keywords, boost / threshold | "Hey Kalman" found | False: "Hey common" / "Hey Carmen" / Calvin, Siri, sentences, silence |
+|---|---|---|
+| HEY KALMAN, 1.5 / 0.25 | 0/15 | 0, 0, 0 |
+| + COMMON, CALMAN, CARMEN, 2.0 / 0.15 (deployed) | 0/15 | 2/3, 1/3, 0 |
+| same four, 4.0 / 0.03 | 4/15 | 2/3, 2/3, 0 |
+| KALMAN, CALMAN, COLEMAN, KALMEN, 3.0 / 0.08 | 0/15 | 0, 0, 0 |
+
+Live on the rover the deployed setting woke three times in about 15 minutes, every time as
+"HEY_COMMON", and Paul reported needing three or four calls. Reading: the general English model hears
+Paul's "Kalman" as other words; tuning cannot reach 18/20 without waking on "common" and "Carmen".
+A model trained on Paul's voice is the next step. One wake on noise was transcribed as
+"Thank you for watching that well."; `rover-mind` now ignores such lines.
 
 ## Gemma on the Mac mini (Metal) against the Jetson (2026-11-07)
 
