@@ -410,3 +410,16 @@ Container `rover/kokoro:0.6.1` (`jetson/tts/`, python:3.11-slim + kokoro-onnx 0.
 | kokoro-v1.0.onnx fp32 (326 MB) | 2.3 s | 3.3 s | 527 MiB | chosen by Paul |
 
 Raw Kokoro output peaks near -9 dBFS; the server now normalises to -1 dBFS (the speaker mixer has no gain above 0 dB). System memory with Gemma, Whisper, the console server and fp32 Kokoro: about 6.0 GB used, 1.4 GB available. A full spoken turn from typed text: Gemma 1.1-1.2 s, speech 3.3 s plus playback. Camera microphone to Whisper is wired but not yet exercised with Paul speaking.
+
+## Supertonic 3 on the Jetson CPU, Korean and English (2026-11-06)
+
+Container `rover/supertonic:1.3.1` (`jetson/tts/supertonic/`), assets 383 MB, load 1.6-2.2 s, 44.1 kHz output (checked: file length matches the SDK's reported duration), container RSS 597-635 MiB.
+
+| Input | Voice, steps | Audio | Synthesis | Compute per audio second |
+|---|---|---|---|---|
+| Korean, 4 sentences | F1, 8 | 13.5 s | 9.65 s | 0.71 |
+| English, 2 sentences | F1, 8 | 7.2 s | 5.0 s | 0.69 |
+| English, short reply | M1, 8 | about 3 s | 2.1 s | about 0.7 |
+| Korean, short reply | M1, 8 | about 2.5 s | 1.7 s | about 0.7 |
+
+Kokoro fp32 on the same CPU: 0.6; Kokoro int8: 0.4. The benchmark claim that Supertonic is 2.7x faster than Kokoro was at 5 steps and on an x86 CPU; 5 steps were not tried here. All ten preset voices (F1-F5, M1-M5) synthesised Korean; M1-M5 were also played in English. With Kokoro stopped, system memory was 5.6 GB used and 1.7 GB available (Gemma, Whisper, Supertonic, console server). The Korean reply language from Gemma needed an explicit per-turn instruction; the system prompt alone was ignored once.

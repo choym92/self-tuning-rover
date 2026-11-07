@@ -93,8 +93,10 @@ Next steps:
   Mac page; one unexplained lingering drive request on 2026-11-06 (`docs/setup-log.md`), so a
   continuous-drive time limit is the next safety item. Camera 20 fps at every mode; the audio
   board microphone reads silence (cause not found; the camera microphone is used instead).
-- Voice: speaker works; `jetson/voice/talk.py` runs one spoken English turn (Whisper, Gemma with
-  thinking off, Kokoro fp32 in `jetson/tts/`). Paul speaking to the robot is still to be tried.
+- Voice: the robot is called Wall-E. `jetson/voice/talk.py` runs one spoken turn in English or
+  Korean (Whisper, Gemma with thinking off, Supertonic 3 voice M1 in `jetson/tts/supertonic/`).
+  Kokoro is installed but off. Whisper is still English-only; Paul speaking to the robot is
+  untested; speaker is at its hardware maximum (external speaker via the 3.5 mm jack if louder).
 - Pending: D436 USB cable, UART soak under vision load, memory plan once vision returns
   (Gemma + Whisper + Kokoro already use about 6 GB).
 - Final microphone: not purchased. Test the Waveshare audio board first; the

@@ -259,7 +259,7 @@ Compared on the Jetson with clocks locked (`docs/verify.md`): YOLO26n 3.6 ms / ~
 - Next: re-enroll from the robot's real camera height (~30 cm on the UGV pan-tilt) once the kit arrives; add multi-frame voting before the robot acts on the label.
 
 
-## On-robot voice output: Kokoro-82M fp32 on the CPU (2026-11-06, DECIDED by Paul)
+## On-robot voice output: Kokoro-82M fp32 on the CPU (2026-11-06, SUPERSEDED the same evening by Supertonic 3, below)
 
 - Engine `kokoro-onnx` 0.6.1 in its own container (`jetson/tts/`), model `kokoro-v1.0.onnx` (fp32, Apache-2.0 weights, MIT runtime), voice `af_heart`, CPU only. Paul picked fp32 over int8 for sound quality after hearing both (`docs/verify.md`).
 - Why Kokoro: among models light enough to run next to Gemma and Whisper on the 8 GB board it has the best measured quality in 2026 CPU benchmarks (UTMOS 4.44, ahead of Supertonic 3 at 4.32 and Pocket TTS at 4.10); larger open models and cloud voices sound better but do not fit the board or need the internet.
@@ -270,3 +270,13 @@ Compared on the Jetson with clocks locked (`docs/verify.md`): YOLO26n 3.6 ms / ~
 
 - One process on the Jetson (`jetson/control/server.py`) opens `/dev/ttyTHS1`, enforces the safety rules (command expiry 0.3 s, latched emergency stop, PWM cap, low-voltage refusal, head limits) and exposes a loopback HTTP API; the Mac page reaches it through an SSH tunnel. Scripts that need the ESP32 go through this server rather than opening the port themselves.
 - Emergency stop uses PWM 0 plus a T:1 zero-speed hold, not T:0, because T:0 in this firmware also releases torque on every bus servo and would let the pan-tilt head drop.
+
+## On-robot voice: Supertonic 3, voice M1, for both English and Korean (2026-11-06, DECIDED by Paul)
+
+- Engine `supertonic` 1.3.1 (ONNX, CPU) in `jetson/tts/supertonic/`, pinned model snapshot `supertone-oss-archive/supertonic-3` revision `aafc6e32416a594460b32413efc49d7fe4ce6d46` in `/home/paulcho/models/supertonic-3`, 44.1 kHz, 8 denoising steps, voice `M1` (Paul picked it after hearing M1-M5 in both languages). `talk.py` sends Korean replies with `lang=ko` and everything else with `lang=en`.
+- Why over Kokoro: one voice for both languages (Kokoro has no Korean) and 0.8 GB less RAM with only one TTS container. Measured cost: English quality a little below Kokoro (benchmarks 4.32 vs 4.44) and similar speed on this CPU (about 0.7 s of compute per second of speech at 8 steps). Kokoro stays installed (`rover/kokoro:0.6.1`, models in `/home/paulcho/models/kokoro`); `talk.py --voice af_jessica` uses it when its container runs.
+- Risk accepted: Supertone announced its dissolution and archived the repository (2026-09-09); the weights (OpenRAIL-M) and SDK are pinned locally and run offline, so nothing depends on the vendor staying up.
+
+## The robot's name is Wall-E (2026-11-06, DECIDED by Paul)
+
+- Spoken as Wall-E in English and 월리 in Korean; used in the LLM system prompt and the console header. An earlier working name the same evening (T-100) was dropped.

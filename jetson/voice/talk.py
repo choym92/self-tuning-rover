@@ -2,7 +2,7 @@
 """One spoken English turn with the rover, orchestrated from the Mac over SSH.
 
   record (rover microphone) -> Whisper (Jetson, rover-stt container)
-  -> Gemma (Jetson, rover-llm container) -> macOS `say` -> rover speaker
+  -> Gemma (Jetson, rover-llm container) -> Supertonic (Jetson, rover-tts-st) -> rover speaker
 
 The Jetson side uses host `arecord`/`aplay`, `curl` and three containers: rover-stt (Whisper),
 rover-llm (Gemma) and rover-tts (Kokoro, `jetson/tts/`). `--tts mac` falls back to macOS `say`.
@@ -14,6 +14,7 @@ rover-llm (Gemma) and rover-tts (Kokoro, `jetson/tts/`). `--tts mac` falls back 
 import argparse
 import json
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -21,13 +22,15 @@ import tempfile
 import time
 
 HOST = "paulcho@192.168.1.238"
-SYSTEM = ("You are Rover, a small indoor robot that Paul built on a Jetson Orin Nano. "
-          "Talk like a relaxed, warm friend: plain spoken English, contractions, one or two short sentences, "
+SYSTEM = ("You are Wall-E (월리 in Korean), a small indoor robot that Paul built on a Jetson Orin Nano. "
+          "Answer in the language Paul used (English or Korean). "
+          "Talk like a relaxed, warm friend: plain spoken language, contractions, one or two short sentences, "
           "no lists, no formal phrasing, no exclamation marks in a row. "
           "You can see with a camera and hear with a microphone, but you cannot drive on your own yet; "
           "if asked to move, say you'll be able to soon.")
 # macOS voices, best first; only the ones installed are used (Premium voices are a free download
 # in System Settings > Accessibility > Spoken Content > System Voice > Manage Voices).
+HANGUL = re.compile(r"[\uac00-\ud7a3]")
 PREFERRED_VOICES = ["Ava (Premium)", "Zoe (Premium)", "Evan (Enhanced)", "Samantha (Enhanced)", "Samantha"]
 
 
@@ -49,7 +52,9 @@ def record_and_transcribe(seconds):
 
 
 def ask_llm(question):
-    body = json.dumps({"messages": [{"role": "system", "content": SYSTEM}, {"role": "user", "content": question}],
+    # Gemma tends to answer in English regardless; make the language explicit per turn.
+    lang_rule = "이번 답은 반드시 한국어로, 반말로 짧게." if HANGUL.search(question) else "Answer in English."
+    body = json.dumps({"messages": [{"role": "system", "content": SYSTEM + " " + lang_rule}, {"role": "user", "content": question}],
                        "max_tokens": 80, "temperature": 0.7,
                        # Gemma otherwise spends every token in reasoning_content and answers nothing.
                        "chat_template_kwargs": {"enable_thinking": False}})
@@ -70,18 +75,29 @@ def pick_voice(requested):
     return next((v for v in PREFERRED_VOICES if v in names), "Samantha")
 
 
+KOKORO_VOICE, SUPERTONIC_VOICE = "af_jessica", "M1"
+# Paul's choice, 2026-11-06: Supertonic M1 speaks both languages (one voice, Korean support,
+# 0.8 GB less RAM). Kokoro stays installed; pass --voice af_jessica etc. to use it when its container runs.
+
+
 def speak_robot(text, voice):
-    """Kokoro on the Jetson: POST the text, play the returned WAV on the rover speaker."""
-    body = json.dumps({"text": text, "voice": voice or "af_heart", "speed": 1.0})
+    """Korean text goes to Supertonic (port 8093), everything else to Kokoro (8092); play on the rover."""
+    if voice and voice[:3] in ("af_", "am_", "bf_", "bm_"):
+        body = json.dumps({"text": text, "voice": voice, "speed": 1.0})
+        url, engine = "http://127.0.0.1:8092/say", "Kokoro " + voice
+    else:
+        lang = "ko" if HANGUL.search(text) else "en"
+        body = json.dumps({"text": text, "lang": lang, "voice": voice or SUPERTONIC_VOICE, "steps": 8, "speed": 1.0})
+        url, engine = "http://127.0.0.1:8093/say", "Supertonic %s (%s)" % (voice or SUPERTONIC_VOICE, lang)
     cmd = ("curl -sf -o /tmp/talk_out.wav -D /tmp/talk_out.h -X POST -H Content-Type:application/json -d "
-           + shlex.quote(body) + " http://127.0.0.1:8092/say && grep -i X-Synth-Seconds /tmp/talk_out.h"
+           + shlex.quote(body) + " " + url + " && grep -i X-Synth-Seconds /tmp/talk_out.h"
            " && aplay -q -D plughw:1,0 /tmp/talk_out.wav")
     t0 = time.perf_counter()
     r = ssh(cmd)
     if r.returncode != 0:
         sys.exit("robot tts failed: " + (r.stderr.strip() or r.stdout.strip()))
     synth = r.stdout.strip().split(":")[-1].strip()
-    return time.perf_counter() - t0, synth
+    return time.perf_counter() - t0, synth, engine
 
 
 def speak(text, voice):
@@ -104,7 +120,7 @@ def main():
     ap.add_argument("--text", help="skip the microphone and use this question")
     ap.add_argument("--seconds", type=float, default=5)
     ap.add_argument("--tts", choices=["robot", "mac"], default="robot", help="Kokoro on the rover (default) or macOS say")
-    ap.add_argument("--voice", default=None, help="Kokoro voice such as af_heart, am_michael; or a macOS voice with --tts mac")
+    ap.add_argument("--voice", default=None, help="override: a Kokoro voice (af_jessica), a Supertonic style (M1) or a macOS voice")
     args = ap.parse_args()
 
     if args.text:
@@ -119,8 +135,8 @@ def main():
     reply, t_llm = ask_llm(heard)
     print(f"reply  ({t_llm:.1f} s): {reply}")
     if args.tts == "robot":
-        t_tts, synth = speak_robot(reply, args.voice)
-        print(f"spoken ({t_tts:.1f} s incl. playback, synth {synth} s, Kokoro {args.voice or 'af_heart'})")
+        t_tts, synth, engine = speak_robot(reply, args.voice)
+        print(f"spoken ({t_tts:.1f} s incl. playback, synth {synth} s, {engine})")
     else:
         voice = pick_voice(args.voice)
         t_tts = speak(reply, voice)

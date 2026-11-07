@@ -7,4 +7,4 @@ RUN pip install --no-cache-dir kokoro-onnx==0.6.1 soundfile
 WORKDIR /app
 COPY tts_server.py .
 EXPOSE 8092
-CMD ["python3", "tts_server.py", "--model", "/models/kokoro-v1.0.onnx", "--voices", "/models/voices-v1.0.bin", "--port", "8092"]
+CMD ["python3", "tts_server.py", "--model", "/models/kokoro-v1.0.onnx", "--voices", "/models/voices-v1.0.bin", "--port", "8092", "--voice", "af_jessica"]
