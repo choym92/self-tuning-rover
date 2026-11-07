@@ -105,8 +105,9 @@ samples (`docs/decisions.md`).
 5. Charging point: a DC5521 extension so the charger does not go near the cables.
 6. WiFi reliability: power save off or 5 GHz; pigtail latching.
 7. Remote access from the office (security review first).
-8. Design canvas (Claude Design) is behind the repository: console boards still show
-   the 2026-11-07 morning state.
+8. (closed 2026-11-07) The Claude Design canvas was brought to this state: index
+   board plus six refreshed boards. It is Paul's visual summary; the repository stays
+   canonical.
 
 ## Documentation health
 
