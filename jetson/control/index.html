@@ -214,17 +214,17 @@ input[type=range] { width:100%; accent-color:var(--accent); margin:0; }
   $("center").addEventListener("click", () => post("/api/head", { pan: 0, tilt: 0 }));
   window.addEventListener("blur", () => { headHeld.clear(); if (headTimer) { clearInterval(headTimer); headTimer = null; } });
 
-  // Video: three sources (5 MP camera, D436 colour, D436 depth). The chosen one fills the big picture,
-  // the next one plays small at 5 fps; clicking the small picture swaps them. Streams are attached only
-  // while the SSE link is up, so a dead stream never hangs on screen.
+  // Video: three sources (5 MP camera, D436 colour, D436 depth). The chosen one fills the big picture;
+  // only the depth view gets a small 5 MP picture (5 fps) for context, and clicking it swaps back.
+  // Streams are attached only while the SSE link is up, so a dead stream never hangs on screen.
   const SRC = { cam: "/video.mjpg", color: "/d436/color.mjpg", depth: "/d436/depth.mjpg" };
-  const NEXT = { cam: "color", color: "depth", depth: "cam" };
+  const NEXT = { cam: null, color: null, depth: "cam" };
   let main = "cam", videoOn = true, videoSrcSet = false, linkOk = false;
   const wasUp = { d436: null, cam: null };
   function videoAttach(on) {
     if (on && !videoSrcSet) {
       $("cam").src = SRC[main] + "?t=" + Date.now();
-      $("pip").src = SRC[NEXT[main]] + "?fps=5&t=" + Date.now();
+      if (NEXT[main]) $("pip").src = SRC[NEXT[main]] + "?fps=5&t=" + Date.now(); else $("pip").removeAttribute("src");
       videoSrcSet = true;
     }
     if (!on && videoSrcSet) { $("cam").removeAttribute("src"); $("pip").removeAttribute("src"); videoSrcSet = false; }
@@ -236,7 +236,7 @@ input[type=range] { width:100%; accent-color:var(--accent); margin:0; }
     if (lastState) render(lastState);
   }
   document.querySelectorAll("#srcsel button").forEach((b) => b.addEventListener("click", () => setMain(b.dataset.src)));
-  $("pip").addEventListener("click", () => setMain(NEXT[main]));
+  $("pip").addEventListener("click", () => { if (NEXT[main]) setMain(NEXT[main]); });
   // Standby releases the D436 (no USB traffic, no reader CPU); waking takes a few seconds.
   $("d436pwr").addEventListener("click", () => {
     const d = (lastState && lastState.d436) || {};
@@ -282,7 +282,7 @@ input[type=range] { width:100%; accent-color:var(--accent); margin:0; }
     chip($("c-d436"), standby ? "D436 standby" : d.connected ? "D436 " + fmt(d.fps, 0) + " fps" : "D436 off", standby ? "warn" : d.connected ? "ok" : "warn");
     $("d436pwr").textContent = standby ? "D436 On" : "D436 Off";
     document.querySelectorAll("#srcsel button").forEach((b) => { if (b.dataset.src !== "cam") b.classList.toggle("dim", standby); });
-    $("pip").style.visibility = (standby && NEXT[main] !== "cam") ? "hidden" : "visible";   // no small D436 picture while it is off
+    $("pip").style.visibility = "visible";
     const mainOk = main === "cam" ? !!c.ok : !!d.connected;
     $("nocam").hidden = mainOk;
     $("nocam").textContent = main === "cam" ? "No 5MP camera" + (c.error ? " · " + c.error : "")
