@@ -332,3 +332,30 @@ Commands: `scripts/jetson-uart-boot-entries.sh`, overlay sources in `jetson/boot
 Steps, each with Paul's go: (1) run the script with sudo; (2) reboot with monitor and keyboard, press `1`; (3) check `dmas` is gone, `PIO mode` in the kernel log, MAXN_SUPER, 6 CPUs, NVMe, WiFi, `/dev/tee0`, `/dev/tpm0`, then read T:1001; (4) first TX test `{"T":131,"cmd":0}` then `cmd 1`; (5) soak under vision load; (6) only then choose DEFAULT.
 
 Outcome so far: steps 1-3 done on 2026-11-06. Key `1` in the boot menu worked with the USB keyboard. On `uart-pio`: `dmas`/`dma-names` gone from the live node, kernel log shows RX and TX in PIO mode, MAXN_SUPER, 6 CPUs, GPU max 1,020 MHz, root on NVMe, WiFi, `/dev/tee0`, `/dev/tpm0` and DP all present. A 4 s passive read gave 10,121 bytes, no 0x00 bytes and 78 complete `T:1001` lines (about 19.5 Hz). TX passed the same day: with `{"T":131,"cmd":0}` the stream stopped (0 bytes in 3 s, from 40 lines in 2 s) and `cmd 1` restored it (60 lines in 3 s), with no SMMU faults on this boot. A first attempt with shell redirection read nothing even before sending, so it proved nothing; the Python test above is the valid one. Paul set `DEFAULT uart-pio` the same evening (backup `extlinux.conf.before-default-pio`), ahead of the soak so that the rover needs no keyboard at boot; automatic boot not yet confirmed. The soak waits for the D436. Key `0` still selects `primary`. `nvidia-l4t-kernel` updates reset DEFAULT.
+
+## PulseAudio must leave the rover audio board alone: `PULSE_IGNORE` udev rule (2026-11-07, written before running)
+
+Goal: stop "Device or resource busy" on `aplay`/`arecord -D plughw:1,0`. The only PulseAudio on the Jetson belongs to the gdm login-screen session (nobody is logged in on the desktop); it reopens the audio board for a few seconds after every ALSA release (`docs/setup-log.md` 2026-11-07, `docs/verify.md` "Speaker playback"). `talk.py` retries for 10 s as a stopgap; this entry removes the cause.
+
+Exact versions: L4T R36.5.2, PulseAudio 15.99.1 (`pulseaudio --version`), systemd udev with `78-sound-card.rules` and `90-pulseaudio.rules`; audio board JMTek `0c76:1229` "USB PnP Audio Device", sound card 1.
+
+Official source: PulseAudio `module-udev-detect.c` at tag v15.99.1 ([GitHub mirror](https://raw.githubusercontent.com/pulseaudio/pulseaudio/v15.99.1/src/modules/module-udev-detect.c)): `if (udev_device_get_property_value(dev, "PULSE_IGNORE")) { pa_log_debug("Ignoring %s, because marked so." ...); return; }` in `process_device()`, which runs on `sound` subsystem devices whose path ends in `/card*`. The same file watches `/dev/snd` with inotify and re-probes a card when another program closes a `pcmC*` node, which is the observed "grabs it after `aplay` releases it" behaviour. Community method for the rule form: [jamielinux](https://jamielinux.com/blog/tell-pulseaudio-to-ignore-a-usb-device-using-udev) (`ATTRS{idVendor}`/`ATTRS{idProduct}` match, says a reboot is needed for PulseAudio to forget the card).
+
+Known issues: the property must sit on the `card*` device, not on `pcm*`/`control*` nodes; PulseAudio only reads it when it processes the card, so an already-loaded card stays until PulseAudio restarts or the device re-enumerates (hence the restart in the script); PipeWire does not honour `PULSE_IGNORE`, irrelevant here (below).
+
+| Assumption | Evidence | Label |
+|---|---|---|
+| The grabbing process is gdm's PulseAudio, not Paul's session | `ps`: `gdm 1285 /usr/bin/pulseaudio --daemonize=no --log-target=journal`; paulcho runs no `pulseaudio`; `uptime` shows 0 users | VERIFIED on this boot; the pid 20368 in the setup log was the previous boot |
+| PipeWire (both users) does not touch ALSA | `/usr/share/pipewire/media-session.d/` has no `with-audio`/`with-alsa` marker, and `media-session.conf` enables the ALSA modules only through them; `pipewire-alsa`/`pipewire-pulse` not installed | VERIFIED |
+| PulseAudio 15.99.1 honours `PULSE_IGNORE` | source at tag v15.99.1, quoted above | VERIFIED in source |
+| The rule matches card 1 and nothing else | `udevadm info -p /sys/class/sound/card1`: `ID_VENDOR_ID=0c76`, `ID_MODEL_ID=1229`; card 0 is `0abd:8050`; the script refuses unless exactly one `0c76:1229` card exists | VERIFIED |
+| `systemctl --machine=gdm@.host --user restart pulseaudio.service` restarts the login-screen PulseAudio | the process command line is the systemd user unit's; as paulcho the bus connection is refused, as root it is the documented form | INFERENCE until run |
+| A desktop login by Paul would also ignore the board | same rule, same PulseAudio | INFERENCE; acceptable, the desktop can use HDA/DisplayPort audio |
+
+Reversibility: `sudo bash scripts/jetson-audio-board-pulse-ignore.sh --undo` removes the file, reloads udev and restarts gdm's PulseAudio; a reboot without the file is the same. Nothing else on the host changes (no package, service or `daemon.json`).
+
+Adversarial review: not run; one file, documented upstream flag, trivially reversible.
+
+Commands: `scripts/jetson-audio-board-pulse-ignore.sh` (`--check` read-only; `sudo ... ` asks for `yes`). Verification afterwards: six back-to-back `aplay` of a silent 1 s WAV on `plughw:1,0` without the retry loop must give zero "busy" (baseline 3 of 6 failed), and `pactl list cards short` as gdm must not list the board.
+
+Outcome: run by Paul on 2026-11-07 13:42 EST. `--check` had passed. Before: gdm's PulseAudio listed the board (card index 1 of 4). After: `PULSE_IGNORE=1` on card1, gdm's PulseAudio restarted (new pid) and lists 3 cards without the board; `systemctl --machine=gdm@.host --user restart pulseaudio.service` worked as root (assumption confirmed). Six silent `aplay` in a row: 0 busy (`docs/verify.md`). A PulseAudio instance for paulcho appeared during the test and also omits the board. Side effect: none seen; no reboot done yet, so the rule's effect at boot (card enumerated before PulseAudio starts) is INFERENCE from the udev mechanism until the next boot is checked.

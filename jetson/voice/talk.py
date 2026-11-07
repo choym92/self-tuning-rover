@@ -40,8 +40,9 @@ def ssh(cmd, timeout=120):
     return subprocess.run(["ssh", "-o", "BatchMode=yes", HOST, cmd], capture_output=True, text=True, timeout=timeout)
 
 
-# The desktop session's PulseAudio grabs the speaker for a few seconds after each aplay releases it
-# ("Device or resource busy", 2026-11-07). Retry for up to 10 s instead of losing the sentence.
+# The login-screen PulseAudio used to grab the speaker for a few seconds after each aplay released it
+# ("Device or resource busy", 2026-11-07). A udev rule now keeps PulseAudio off the board
+# (scripts/jetson-audio-board-pulse-ignore.sh); the 10 s retry stays as a safety net.
 PLAY = ("for i in $(seq 1 20); do aplay -q -D plughw:1,0 {wav} 2>/tmp/aplay.err && exit 0; "
         "grep -q busy /tmp/aplay.err || break; sleep 0.5; done; cat /tmp/aplay.err >&2; exit 1")
 

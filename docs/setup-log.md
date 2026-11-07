@@ -297,4 +297,19 @@ Cells in, Jetson booted on rover power (fan on; R36.5.2 kernel, MAXN_SUPER, abou
   to the codec at all: the switches are either all off or on the earphone side. Plan: with the rover
   powered off, set the two switches under "MIC" to ON and the two under "earphone MIC" to OFF (if still
   silent, try the other pair), then repeat the recording test. Paul: only if the camera microphone
-  proves inadequate for voice recognition; otherwise leave it.
+  proves inadequate for voice recognition; otherwise leave it. Later the same day Paul chose to skip
+  the switch for now and fix only the PulseAudio conflict below.
+- PulseAudio "busy" cause removed (13:42 EST, Paul ran the guarded script with sudo): the grabbing
+  process was the gdm login-screen session's PulseAudio (nobody logged in on the desktop; Paul's
+  session runs only PipeWire, which does not manage ALSA here). `scripts/jetson-audio-board-pulse-ignore.sh`
+  wrote `/etc/udev/rules.d/89-rover-audio-board-pulse-ignore.rules` (`PULSE_IGNORE=1` for USB
+  `0c76:1229`), reloaded udev and restarted gdm's PulseAudio; the board disappeared from its card list.
+  Measurement in `docs/verify.md` (Supertonic section); preflight entry in `docs/preflight.md`. Undo:
+  the same script with `--undo`.
+- Console page dead after the 12:05 copy: `~/control/index.html` on the Jetson had the same byte count
+  as the repository file (21,227) but different content (old steering block plus a duplicated fragment
+  around `fmt()`), so the browser threw `SyntaxError: Unexpected token '{'` at line 310 and the page
+  showed `LINK --` and "No camera" while the API and SSE stream were fine. Cause not established
+  (the copy happened during the WiFi drops). Fixed by copying the page again; the torn copy is kept
+  at `/tmp/index.html.torn-*` on the Jetson for this boot only. Check after every deploy:
+  `curl -s http://127.0.0.1:8091/ | diff - jetson/control/index.html` must print nothing.

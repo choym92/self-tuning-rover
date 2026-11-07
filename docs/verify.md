@@ -455,6 +455,14 @@ pid 20368) opened `pcmC1D0p` for a few seconds each time `aplay` released it, so
 `aplay -D plughw:1,0` failed with "Device or resource busy" on three of six attempts and
 succeeded on retry. Earlier spoken turns on 2026-11-06 did not hit this.
 
+Fix measured the same day (13:42 EST): a udev rule marks the audio board `PULSE_IGNORE=1`
+(`scripts/jetson-audio-board-pulse-ignore.sh`, `docs/preflight.md`). Before it, the login-screen
+(`gdm`) PulseAudio listed `alsa_card.usb-Solid_State_System_Co._Ltd._USB_PnP_Audio_Device...`; after
+the rule and a PulseAudio restart it lists only HDA, the camera microphone and the APE card, and so
+does Paul's own PulseAudio when one is spawned. Six back-to-back `aplay -D plughw:1,0` of a silent
+1 s WAV with 1 s gaps and no retry loop: 6 of 6 succeeded, 0 busy (baseline above: 3 of 6 busy).
+The 10 s retry in `talk.py` stays as a safety net.
+
 ## Console stage 2: camera view in the page, D436 connected on the rover (2026-11-07, Jetson on the rover)
 
 - `/video.mjpg` from `jetson/control/server.py` (OpenCV V4L2 raw mode hands over the 5 MP camera's own JPEG

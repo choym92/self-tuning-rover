@@ -67,7 +67,7 @@ Services on the Jetson (all published on loopback unless noted; the Mac reaches 
 - The D436 USB cable flexes with the head and it dropped off the bus once while handled; keep slack, expect a log line. `docs/verify.md` (console stage 2), `docs/decisions.md`.
 - Tilt bracket blocks the lower right of the D436 image and reads as a permanent 0.2-0.5 m obstacle in depth until moved or masked. `docs/verify.md` (console stage 2).
 - Audio board microphones are silent because of the DIP switch; the camera microphone is the capture device. `docs/setup-log.md` 2026-11-07.
-- The desktop session's PulseAudio grabs the speaker for a few seconds after each `aplay`, giving "Device or resource busy"; a retry in `talk.py` is planned, not done. `docs/setup-log.md` 2026-11-07.
+- PulseAudio (the gdm login-screen session) used to grab the speaker for a few seconds after each `aplay` ("Device or resource busy"). Fixed 2026-11-07 with a udev rule that marks the audio board `PULSE_IGNORE=1` (`scripts/jetson-audio-board-pulse-ignore.sh`, undo with `--undo`); `talk.py` keeps a 10 s retry as a safety net. `docs/setup-log.md` 2026-11-07, `docs/verify.md`.
 - Speaker is at its hardware maximum (mixer 100%, clips normalised); mixer settings are runtime only, not persisted. `docs/setup-log.md` 2026-11-06.
 - WiFi: two drops on 2026-11-07 (SSH tunnel reset while the Jetson stayed up); WiFi power saving not yet checked. The Jetson boots at 1969 until WiFi time sync arrives, so early logs have wrong timestamps. `docs/setup-log.md`.
 - Ethernet is physically blocked by the chassis; use WiFi or the USB-C link. `docs/setup-log.md` 2026-11-06.
