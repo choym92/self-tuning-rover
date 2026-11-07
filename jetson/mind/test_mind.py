@@ -255,6 +255,25 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual([x["content"] for x in msgs[1:]], ["8", "9", "How are you?"])
         self.assertIn("반말", m.messages("배고파?")[0]["content"])
 
+    def test_sessions_tag_events_and_scope_the_prompt_history(self):
+        m = mind.Mind.__new__(mind.Mind)
+        m.journal = mind.Journal(os.path.join(self.tmp.name, "journal"))
+        m.history = mind.deque([{"role": "user", "content": "old"}], maxlen=40)
+        m.convo_until = 0.0
+        m.speaking = False
+        m.play = lambda *a, **k: True
+        m.begin_session()
+        first = m.journal.session
+        self.assertTrue(first.startswith("s"))
+        self.assertEqual(list(m.history), [])                     # the prompt starts clean...
+        m.journal.write("heard", text="Hi")
+        m.end_conversation("quiet")
+        self.assertIsNone(m.journal.session)
+        m.journal.write("heard", text="outside a session")
+        events = [json.loads(l) for f in os.listdir(m.journal.folder) for l in open(os.path.join(m.journal.folder, f), encoding="utf-8")]
+        self.assertEqual([e.get("session") for e in events], [first, first, first, None])   # ...the journal keeps everything
+        self.assertEqual([e["kind"] for e in events], ["session_start", "heard", "conversation_end", "heard"])
+
     def test_recent_journal_keeps_conversation_events(self):
         j = mind.Journal(os.path.join(self.tmp.name, "journal"))
         j.write("start", mic="x")

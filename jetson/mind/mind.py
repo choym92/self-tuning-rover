@@ -406,10 +406,12 @@ class Journal:
         self.folder = folder
         os.makedirs(folder, exist_ok=True)
         self.lock = threading.Lock()
+        self.session = None              # every event written while a conversation is open carries its id
 
     def write(self, kind, **fields):
         now = datetime.now().astimezone()
-        rec = {"ts": now.isoformat(timespec="milliseconds"), "kind": kind, **fields}
+        rec = {"ts": now.isoformat(timespec="milliseconds"), "kind": kind,
+               **({"session": self.session} if self.session else {}), **fields}
         with self.lock, open(os.path.join(self.folder, now.strftime("%Y-%m-%d") + ".jsonl"), "a", encoding="utf-8") as f:
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
         print(json.dumps(rec, ensure_ascii=False), flush=True)
@@ -561,9 +563,19 @@ class Mind:
         return None
 
     # --- one turn -------------------------------------------------------------------------
+    def begin_session(self):
+        """A conversation is a session: it starts when Kalman is called outside a conversation. The prompt
+        carries only this session's turns; earlier sessions stay in the journal (nothing is deleted) and
+        will come back through recall (docs/decisions.md, 2026-11-07)."""
+        self.journal.session = datetime.now().astimezone().strftime("s%Y%m%d-%H%M%S")
+        self.history.clear()
+        self.journal.write("session_start")
+
     def turn(self, source, frames, called="", question="", depth=0, interrupted=False):
         """One exchange. With `question` (said in the same breath as the name) Kalman answers at once;
         otherwise it beeps and records the question."""
+        if not self.journal.session:
+            self.begin_session()
         self.journal.write("wake", source=source, heard=called)
         if question:
             heard = question
@@ -707,6 +719,7 @@ class Mind:
     def end_conversation(self, reason):
         self.convo_until = 0.0
         self.journal.write("conversation_end", reason=reason)
+        self.journal.session = None
         self.speaking = True
         self.play(tone(freq=440.0, seconds=0.25, volume=0.2))
         self.speaking = False
@@ -756,7 +769,7 @@ class Mind:
                 self.state = "listening"
 
 
-JOURNAL_KINDS = ("wake", "heard", "reply", "interrupted", "conversation_end", "ignored", "error")
+JOURNAL_KINDS = ("session_start", "wake", "heard", "reply", "interrupted", "conversation_end", "ignored", "error")
 
 
 def recent_journal(folder, n=40):
@@ -790,7 +803,7 @@ def control_server(mind, port, hosts=("127.0.0.1",)):
         def do_GET(self):
             path, _, query = self.path.partition("?")
             if path == "/state":
-                return self._json(200, {"state": mind.state, **mind.counts})
+                return self._json(200, {"state": mind.state, "session": mind.journal.session, **mind.counts})
             if path == "/config":
                 return self._json(200, {"parts": mind.cfg.parts(), "defaults": mind.cfg.seed, "state": mind.state_line(),
                                         "settings": mind.cfg.settings(),

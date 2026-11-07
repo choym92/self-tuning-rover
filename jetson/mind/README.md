@@ -51,3 +51,8 @@ words and voice settings only, never motion.
 
 Run command now also mounts `-v /home/paulcho/kalman/config:/config`.
 
+Sessions: a conversation is a session (`s20261107-185501`), opened when Kalman is called outside a
+conversation and closed by the low tone. Every journal event in it carries the id; the prompt carries
+only the current session's turns. Nothing is deleted: earlier sessions stay in the journal and are meant
+to come back through recall (summaries and approved facts first; design in `docs/decisions.md`).
+

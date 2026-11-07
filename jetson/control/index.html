@@ -487,12 +487,12 @@ main[hidden] { display:none; }
   async function loadEvents() {
     try {
       const [j, st] = await Promise.all([getJSON("/mind/journal"), getJSON("/mind/state")]);
-      $("m-counts").textContent = st.state + " · wakes " + st.wakes + " · follow-ups " + st.follow_ups + " · interrupts " + st.interrupts;
+      $("m-counts").textContent = (st.session ? "session " + st.session.slice(10) : "no session") + " · " + st.state + " · wakes " + st.wakes + " · follow-ups " + st.follow_ups + " · interrupts " + st.interrupts;
       const list = $("m-events"); list.textContent = "";
       (j.events || []).slice().reverse().forEach((e) => {
         const row = document.createElement("div"); row.className = "ev " + e.kind;
         const t = document.createElement("span"); t.className = "t"; t.textContent = (e.ts || "").slice(11, 19);
-        const k = document.createElement("span"); k.className = "k"; k.textContent = e.kind + (e.source ? " · " + e.source : "");
+        const k = document.createElement("span"); k.className = "k"; k.textContent = e.kind === "session_start" ? "── new session" : e.kind + (e.source ? " · " + e.source : "");
         const x = document.createElement("span"); x.className = "x";
         x.textContent = e.text || e.heard || e.by || e.reason || e.error || "";
         row.append(t, k, x); list.append(row);
