@@ -40,6 +40,12 @@ def ssh(cmd, timeout=120):
     return subprocess.run(["ssh", "-o", "BatchMode=yes", HOST, cmd], capture_output=True, text=True, timeout=timeout)
 
 
+# The desktop session's PulseAudio grabs the speaker for a few seconds after each aplay releases it
+# ("Device or resource busy", 2026-11-07). Retry for up to 10 s instead of losing the sentence.
+PLAY = ("for i in $(seq 1 20); do aplay -q -D plughw:1,0 {wav} 2>/tmp/aplay.err && exit 0; "
+        "grep -q busy /tmp/aplay.err || break; sleep 0.5; done; cat /tmp/aplay.err >&2; exit 1")
+
+
 def record_and_transcribe(seconds):
     cmd = (f"arecord -q -D plughw:0,0 -f S16_LE -r 16000 -c 1 -d {int(seconds)} /tmp/talk_in.wav && "
            "docker cp /tmp/talk_in.wav rover-stt:/tmp/in.wav && "
@@ -95,8 +101,8 @@ def speak_robot(text, voice):
         body = json.dumps({"text": spoken, "lang": lang, "voice": voice or SUPERTONIC_VOICE, "steps": 10, "speed": 1.0})
         url, engine = "http://127.0.0.1:8093/say", "Supertonic %s (%s)" % (voice or SUPERTONIC_VOICE, lang)
     cmd = ("curl -sf -o /tmp/talk_out.wav -D /tmp/talk_out.h -X POST -H Content-Type:application/json -d "
-           + shlex.quote(body) + " " + url + " && grep -i X-Synth-Seconds /tmp/talk_out.h"
-           " && aplay -q -D plughw:1,0 /tmp/talk_out.wav")
+           + shlex.quote(body) + " " + url + " && grep -i X-Synth-Seconds /tmp/talk_out.h && "
+           + PLAY.format(wav="/tmp/talk_out.wav"))
     t0 = time.perf_counter()
     r = ssh(cmd)
     if r.returncode != 0:
@@ -114,7 +120,7 @@ def speak(text, voice):
         subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", aiff, "-af", "loudnorm=I=-14:TP=-1:LRA=11",
                         "-ar", "48000", "-ac", "2", wav], check=True)
         subprocess.run(["scp", "-q", "-o", "BatchMode=yes", wav, HOST + ":/tmp/talk_out.wav"], check=True)
-    r = ssh("aplay -q -D plughw:1,0 /tmp/talk_out.wav")
+    r = ssh(PLAY.format(wav="/tmp/talk_out.wav"))
     if r.returncode != 0:
         sys.exit("aplay failed: " + r.stderr.strip())
     return time.perf_counter() - t0
