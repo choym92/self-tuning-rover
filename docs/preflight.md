@@ -300,3 +300,35 @@ The fixed eight seconds of audio took 9.24 s wall time to capture/send; this
 Mac AVFoundation pacing discrepancy remains to be explained and does not
 represent end-of-speech UX. Wake word, VAD, final microphone and noise tests
 remain UNVERIFIED.
+
+## UART1 boot test entries for the `/dev/ttyTHS1` DMA bug (2026-11-06, written before running)
+
+Goal: read and write the ESP32 on the 40-pin UART. Add two boot entries that are used only when picked in the menu; `DEFAULT primary` stays.
+
+Exact versions: Orin Nano Super devkit, L4T R36.5.2, kernel and DTB packages 5.15.199-tegra-36.5.2-20260716114719, root on `/dev/nvme0n1p1`.
+
+Official sources: [R36.5.2 release notes](https://docs.nvidia.com/jetson/archives/r36.5.2/ReleaseNotes/Jetson_Linux_Release_Notes_r36.5.2.pdf) (silent on UART, DMA and SMMU), [UEFI Adaptation r36.5.2](https://docs.nvidia.com/jetson/archives/r36.5.2/DeveloperGuide/SD/Bootloader/UEFI.html). NVIDIA staff fix: [forum 363837](https://forums.developer.nvidia.com/t/solved-uart-serial-port-not-working-after-upgradint-to-jetpack-6-2-2-orin-nano-nx/363837), [forum 369191](https://forums.developer.nvidia.com/t/dma-on-dev-ttyths1-corrupts-receiving-data/369191). Community method: [jetson-orin-uart](https://github.com/jetsonhacks/jetson-orin-uart), not used as is because its installer changes DEFAULT.
+
+Known issues: [forum 375852](https://forums.developer.nvidia.com/t/uart1-gpio-header-pins-8-10-dev-ttyths1-receiving-corrupted-data-on-jetpack-6-2-2-jetson-orin-nx-16gb-waveshare-base-board/375852) (R36.5.0, Orin NX): RX worked without DMA, TX did not, staff said add `iommus`, thread not closed. Nobody has shown either fix on R36.5.2. `nv-update-extlinux` resets DEFAULT to `primary` on every `nvidia-l4t-kernel` update.
+
+| Assumption | Evidence | Label |
+|---|---|---|
+| This is the DMA bug | Lines read as 0x00 except the tail; `arm-smmu` faults with the GPCDMA stream ID in `kern.log`; no `iommus` on `serial@3100000` | VERIFIED symptoms and DT; link between faults and reads INFERENCE |
+| Unfixed on this build | Live node and `/boot/dtb` file lack `iommus`; no newer `r36.x` apt repository | VERIFIED |
+| TX has the same problem at 16 bytes or more | Mainline `serial-tegra` source, R36.5 source not read | INFERENCE |
+| Overlays need an FDT line | edk2-nvidia r36.5.1 launcher source | VERIFIED for r36.5.1 |
+| FDT line does not change Super mode, NVMe or WiFi | Live DT against file diff traced to UEFI fixups | INFERENCE, checked again after boot |
+| Menu appears with a second LABEL; digits pick entries, USB keyboard works | Launcher source; ConIn/ConOut variables | VERIFIED in source, not yet seen on this board |
+| DisplayPort and USB keyboard work on the rover | 2026-11-06 reboot: `DP-1 connected`, Logitech receiver listed, login screen seen | VERIFIED |
+| `iommus` overlay applies | `fdtoverlay` on the real DTB gives `<4 4>` | VERIFIED |
+| `delete_prop` applies | UEFI only, `fdtoverlay` cannot test it; failure leaves DMA on | INFERENCE |
+
+Reversibility: `primary` is not touched, so a hang in a test entry needs one power cycle. A panic has no automatic fallback. Undo is `cp` of the timestamped backup; the `.dtbo` files stay harmless in `/boot`. The microSD is not a recovery path here.
+
+Adversarial review result: the plan to set the new entry as DEFAULT was refuted; replaced by menu-only entries. PIO first, `iommus` second. Add a TX test, because reads prove RX only, and a soak under vision load (32-byte FIFO; USB and NVMe interrupts share CPU0).
+
+Commands: `scripts/jetson-uart-boot-entries.sh`, overlay sources in `jetson/boot/`. `--check` passed on the Jetson on 2026-11-06 and wrote nothing (hash unchanged, no `/boot/*uart*`). Running without root was refused before the prompt. The prompt answering `no` under sudo is untested.
+
+Steps, each with Paul's go: (1) run the script with sudo; (2) reboot with monitor and keyboard, press `1`; (3) check `dmas` is gone, `PIO mode` in the kernel log, MAXN_SUPER, 6 CPUs, NVMe, WiFi, `/dev/tee0`, `/dev/tpm0`, then read T:1001; (4) first TX test `{"T":131,"cmd":0}` then `cmd 1`; (5) soak under vision load; (6) only then choose DEFAULT.
+
+Outcome so far: steps 1-3 done on 2026-11-06. Key `1` in the boot menu worked with the USB keyboard. On `uart-pio`: `dmas`/`dma-names` gone from the live node, kernel log shows RX and TX in PIO mode, MAXN_SUPER, 6 CPUs, GPU max 1,020 MHz, root on NVMe, WiFi, `/dev/tee0`, `/dev/tpm0` and DP all present. A 4 s passive read gave 10,121 bytes, no 0x00 bytes and 78 complete `T:1001` lines (about 19.5 Hz). TX passed the same day: with `{"T":131,"cmd":0}` the stream stopped (0 bytes in 3 s, from 40 lines in 2 s) and `cmd 1` restored it (60 lines in 3 s), with no SMMU faults on this boot. A first attempt with shell redirection read nothing even before sending, so it proved nothing; the Python test above is the valid one. The soak and DEFAULT are still open; a plain reboot returns to `primary` and the bug.

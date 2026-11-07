@@ -1,0 +1,14 @@
+/dts-v1/;
+/plugin/;
+
+/* Run UARTA (/dev/ttyTHS1) in PIO mode. delete_prop is applied by UEFI, not by fdtoverlay. */
+/ {
+    overlay-name = "UARTA PIO";
+    fragment@0 {
+        target-path = "/bus@0/serial@3100000";
+        delete_prop = "dmas", "dma-names";
+        __overlay__ {
+            status = "okay";
+        };
+    };
+};

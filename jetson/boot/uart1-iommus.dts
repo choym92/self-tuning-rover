@@ -1,0 +1,14 @@
+/dts-v1/;
+/plugin/;
+
+/* Keep DMA on UARTA and add the missing IOMMU stream (0x4 = TEGRA234_SID_GPCDMA). */
+/ {
+    overlay-name = "UARTA DMA iommus";
+    fragment@0 {
+        target-path = "/bus@0/serial@3100000";
+        __overlay__ {
+            iommus = <&smmu_niso0 0x4>;
+            status = "okay";
+        };
+    };
+};

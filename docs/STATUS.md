@@ -1,6 +1,6 @@
 # Current project status
 
-Last reviewed: 2026-09-25 EDT
+Last reviewed: 2026-11-06 EST
 
 This is the short cross-agent handoff. It records current direction, not the
 full evidence. Follow its links for measurements and history. Re-check live
@@ -80,12 +80,16 @@ Next steps:
   Jetson over USB 3 on 2026-10-03 (`docs/verify.md`). 10-minute IMU soak with video
   passed (0.006% gyro samples missing, 0 video drops). Still to do: depth accuracy
   against a tape measure. The Mac is not a usable live host.
-- Waveshare UGV Rover PT Acce: arrived 2026-10-31; the Jetson is assembled into it
-  but nothing is powered yet (`docs/setup-log.md`). The D436 is on the pan-tilt head
-  (`docs/decisions.md`). Cells: 3 × Molicel P30B, ordered 2026-10-31
-  (`docs/build-spec.md`). First power-on checks: battery LED off (polarity), charger
-  once to wake the UPS, WiFi signal (the rover antenna connectors came off easily),
-  T:1001 feedback on `/dev/ttyTHS1`, wheel direction with T:11.
+- Waveshare UGV Rover PT Acce: arrived 2026-10-31, first powered 2026-11-06
+  (`docs/setup-log.md`). The D436 goes on the pan-tilt head (`docs/decisions.md`);
+  it was not plugged in on 2026-11-06. Cells: 3 × Molicel P30B.
+- Jetson on the rover: WiFi the home 2.4 GHz network, last seen at `192.168.1.238` (DHCP); USB-C
+  fallback `192.168.55.1`. The Ethernet port is physically blocked.
+- UART: RX works only when the boot menu entry `uart-pio` (key 1) is picked; `DEFAULT` is
+  still `primary`, which has the DMA bug (`docs/preflight.md`). TX passed with T:131.
+- ESP32 set to UGV Rover with pan-tilt by T:900 on 2026-11-06. Next: confirm `s 22` on the
+  OLED and after a power cycle, soak the UART under vision load, choose the boot DEFAULT,
+  then wheel direction with T:11, wheels off the ground.
 - Final microphone: not purchased. Test the Waveshare audio board first; the
   planned fallback is a Seeed reSpeaker XVF3800 USB four-mic array.
 
