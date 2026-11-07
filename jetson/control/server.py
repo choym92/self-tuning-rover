@@ -459,7 +459,7 @@ def control_loop(controller):
         time.sleep(TICK)
 
 
-def make_handler(controller, page_path, camera=None, eyes=None, brain=None):
+def make_handler(controller, page_path, camera=None, eyes=None, brain=None, mind_base=None):
     camera = camera or Camera()
     eyes = eyes or EyesLink()
     brain = brain or BrainLink()
@@ -530,6 +530,8 @@ def make_handler(controller, page_path, camera=None, eyes=None, brain=None):
                         time.sleep(0.2)
                 except (BrokenPipeError, ConnectionResetError):
                     return
+            elif self.path.startswith("/mind/"):
+                self._mind("GET")
             elif self.path.startswith("/d436/"):
                 # Pass-through to the eyes service; streams are copied chunk by chunk as they arrive.
                 if not eyes.base:
@@ -586,7 +588,26 @@ def make_handler(controller, page_path, camera=None, eyes=None, brain=None):
             else:
                 self._json(404, {"error": "not found"})
 
+        def _mind(self, method):
+            """Pass-through to rover-mind's control port (prompt parts, settings, journal) for the Mind view.
+            It changes words and voice settings only; nothing here reaches the motors."""
+            if not mind_base:
+                return self._json(503, {"error": "rover-mind not configured"})
+            n = int(self.headers.get("Content-Length") or 0) if method == "POST" else 0
+            raw = self.rfile.read(n) if 0 < n <= 32768 else None
+            req = urllib.request.Request(mind_base + self.path[len("/mind"):], data=raw if method == "POST" else None,
+                                         method=method, headers={"Content-Type": "application/json"})
+            try:
+                with urllib.request.urlopen(req, timeout=5) as up:
+                    self._bytes(up.status, up.headers.get("Content-Type", "application/json"), up.read())
+            except urllib.error.HTTPError as e:
+                self._bytes(e.code, e.headers.get("Content-Type", "application/json"), e.read())
+            except Exception:
+                self._json(503, {"error": "rover-mind unreachable"})
+
         def do_POST(self):
+            if self.path.startswith("/mind/"):
+                return self._mind("POST")
             if self.path.startswith("/d436/"):
                 # Commands for the eyes service (camera standby); same pass-through as the GETs.
                 if not eyes.base:
@@ -627,9 +648,9 @@ def make_handler(controller, page_path, camera=None, eyes=None, brain=None):
     return Handler
 
 
-def serve(controller, host, port, page_path, camera=None, eyes=None, brain=None):
+def serve(controller, host, port, page_path, camera=None, eyes=None, brain=None, mind_base=None):
     threading.Thread(target=control_loop, args=(controller,), daemon=True).start()
-    httpd = ThreadingHTTPServer((host, port), make_handler(controller, page_path, camera, eyes, brain))
+    httpd = ThreadingHTTPServer((host, port), make_handler(controller, page_path, camera, eyes, brain, mind_base))
     httpd.daemon_threads = True
     return httpd
 
@@ -644,6 +665,7 @@ def main():
     ap.add_argument("--camera", default="/dev/video0", help="V4L2 device for /video.mjpg; 'none' to run without video")
     ap.add_argument("--eyes", default="http://127.0.0.1:8094", help="eyes service (D436) proxied under /d436/; 'none' to disable")
     ap.add_argument("--brain", default="http://rover-brainlink:8080", help="LLM health check through the tunnel; 'none' to disable")
+    ap.add_argument("--mind", default="http://172.18.0.1:8096", help="rover-mind control port for the Mind view; 'none' to disable")
     ap.add_argument("--pan-trim", type=float, default=0.0, help="servo pan reading of the true forward direction (calibration)")
     ap.add_argument("--tilt-trim", type=float, default=0.0, help="servo tilt reading of level forward (calibration)")
     ap.add_argument("--head-spd", type=int, default=HEAD_SPD, help="T:133 SPD for the pan-tilt servos; 0 = fastest")
@@ -657,7 +679,8 @@ def main():
     camera = Camera(None if args.camera == "none" else args.camera)
     eyes = EyesLink(None if args.eyes == "none" else args.eyes)
     brain = BrainLink(None if args.brain == "none" else args.brain)
-    httpd = serve(controller, args.host, args.port, os.path.join(HERE, "index.html"), camera, eyes, brain)
+    httpd = serve(controller, args.host, args.port, os.path.join(HERE, "index.html"), camera, eyes, brain,
+                  None if args.mind == "none" else args.mind.rstrip("/"))
     print("rover-control on %s:%d, serial %s, cap %d, drive %s, camera %s, eyes %s, brain %s" % (
         args.host, args.port, args.serial, args.cap, "ALLOWED" if args.allow_drive else "disabled", args.camera, args.eyes,
         args.brain), flush=True)

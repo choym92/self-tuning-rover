@@ -101,11 +101,40 @@ input[type=range] { width:100%; accent-color:var(--accent); margin:0; }
 .seg button:focus-visible { outline-offset:-2px; }
 .vid img.pip { position:absolute; right:10px; bottom:46px; width:28%; height:auto; aspect-ratio:16/9; object-fit:contain; background:#000; border:1px solid rgba(255,255,255,.2); border-radius:4px; cursor:pointer; }
 .vid img.pip:not([src]) { display:none; }
+/* Mind view: prompt parts, settings, what Gemma receives, the conversation */
+.viewsel { flex:none; }
+.viewsel button { min-height:28px; height:28px; }
+.mindview { display:grid; grid-template-columns:minmax(0,1.25fr) minmax(0,1fr); gap:14px; padding:14px 16px; align-items:start; }
+main[hidden] { display:none; }
+@media (max-width: 1000px) { .mindview { grid-template-columns:1fr; } }
+.mcol { display:flex; flex-direction:column; gap:10px; min-width:0; }
+.part { display:flex; flex-direction:column; gap:4px; }
+.part label { display:flex; justify-content:space-between; align-items:baseline; color:var(--mute); font-size:12px; }
+.part label b { color:var(--ink); font-size:12.5px; font-weight:600; }
+.mindview textarea { width:100%; box-sizing:border-box; resize:vertical; min-height:72px; background:#0f161d; color:var(--ink); border:1px solid #2c3948; border-radius:4px; padding:8px 10px; font:12.5px/1.5 var(--mono); }
+.mindview textarea:focus, .mindview input:focus { outline:2px solid var(--accent); outline-offset:1px; }
+.linkbtn { min-height:0; height:auto; padding:0; border:0; background:none; color:var(--accent); font-size:11.5px; cursor:pointer; }
+.row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.row button { min-height:30px; height:30px; padding:0 12px; }
+.msg { font-size:12px; color:var(--mute); }
+.msg.ok { color:var(--ok); } .msg.bad { color:var(--bad); }
+.settings { display:grid; grid-template-columns:auto 90px minmax(0,1fr); gap:6px 10px; align-items:center; font-size:12.5px; }
+.settings span.k { color:var(--ink); font-family:var(--mono); font-size:12px; }
+.settings span.h { color:var(--mute); font-size:11.5px; }
+.settings input { width:100%; box-sizing:border-box; background:#0f161d; color:var(--ink); border:1px solid #2c3948; border-radius:4px; padding:4px 6px; font:12.5px var(--mono); }
+.prompt { margin:0; white-space:pre-wrap; word-break:break-word; background:#0f161d; border:1px solid #2c3948; border-radius:4px; padding:8px 10px; font:12px/1.5 var(--mono); color:#c8d3df; max-height:340px; overflow:auto; }
+.prompt .role { color:var(--accent); font-weight:700; }
+.events { display:flex; flex-direction:column; gap:4px; max-height:420px; overflow:auto; font-size:12.5px; }
+.ev { display:grid; grid-template-columns:62px 92px minmax(0,1fr); gap:8px; padding:3px 0; border-bottom:1px solid #1b2530; }
+.ev .t { color:var(--mute); font-family:var(--mono); font-size:11.5px; }
+.ev .k { color:var(--mute); font-size:11.5px; }
+.ev.heard .x { color:var(--ink); } .ev.reply .x { color:#9ee6e3; } .ev.interrupted .x, .ev.error .x { color:var(--warn); }
 </style>
 </head>
 <body>
 <header>
   <div class="brand"><span id="linkdot" class="dot bad"></span><strong>Kalman</strong></div>
+  <div class="seg viewsel" id="viewsel"><button type="button" data-view="drive" class="on">Drive</button><button type="button" data-view="mind">Mind</button></div>
   <div class="rail">
     <span id="c-link" class="chip mono">LINK --</span>
     <span id="c-uart" class="chip mono">UART --</span>
@@ -120,7 +149,7 @@ input[type=range] { width:100%; accent-color:var(--accent); margin:0; }
   <button id="reset" type="button" hidden>Reset E-stop</button>
   <button id="estop" type="button">E-STOP (Space)</button>
 </header>
-<main>
+<main id="driveview">
   <section class="video">
     <div class="vid">
       <img id="cam" alt="">
@@ -194,10 +223,41 @@ input[type=range] { width:100%; accent-color:var(--accent); margin:0; }
     </div>
   </aside>
 </main>
+<main id="mindview" class="mindview" hidden>
+  <div class="mcol">
+    <div class="card">
+      <div class="title">Prompt <small id="m-folder">--</small></div>
+      <div class="part"><label><b>Identity</b> who Kalman is <button type="button" class="linkbtn" data-default="identity">use default</button></label><textarea id="p-identity" rows="4" spellcheck="false"></textarea></div>
+      <div class="part"><label><b>Style</b> how he talks <button type="button" class="linkbtn" data-default="style">use default</button></label><textarea id="p-style" rows="4" spellcheck="false"></textarea></div>
+      <div class="part"><label><b>Rules</b> what he must and must not do <button type="button" class="linkbtn" data-default="rules">use default</button></label><textarea id="p-rules" rows="5" spellcheck="false"></textarea></div>
+      <div class="part"><label><b>Right now</b> filled in for every reply</label><div id="m-state" class="prompt">--</div></div>
+      <div class="row"><button type="button" id="m-save">Save prompt</button><button type="button" id="m-reload">Reload</button><span id="m-msg" class="msg">Applies from the next reply.</span></div>
+    </div>
+    <div class="card">
+      <div class="title">What Gemma receives <span class="row"><button type="button" class="linkbtn" data-preview="en">English</button><button type="button" class="linkbtn" data-preview="ko">Korean</button></span></div>
+      <pre id="m-preview" class="prompt">--</pre>
+    </div>
+  </div>
+  <div class="mcol">
+    <div class="card">
+      <div class="title">Settings</div>
+      <div id="m-settings" class="settings"></div>
+      <div class="row"><button type="button" id="s-save">Save settings</button><span id="s-msg" class="msg"></span></div>
+    </div>
+    <div class="card">
+      <div class="title">Conversation <small id="m-counts" class="mono">--</small></div>
+      <div id="m-events" class="events"></div>
+    </div>
+  </div>
+</main>
 <script>
 (function () {
   const $ = (id) => document.getElementById(id);
   const pressed = new Set();
+  // Typing in the Mind view must not drive the rover: keys aimed at a text field skip the drive/head/E-stop
+  // shortcuts below (the E-STOP button in the header still works).
+  const typing = (e) => e.target && (e.target.tagName === "TEXTAREA" || (e.target.tagName === "INPUT" && e.target.type !== "range"));
+  ["keydown", "keyup"].forEach((t) => document.addEventListener(t, (e) => { if (typing(e)) e.stopImmediatePropagation(); }, true));
   let lastState = null, lastEvent = 0, sendTimer = null, lastReq = [0, 0];
 
   function request() {
@@ -284,7 +344,7 @@ input[type=range] { width:100%; accent-color:var(--accent); margin:0; }
   // Streams are attached only while the SSE link is up, so a dead stream never hangs on screen.
   const SRC = { cam: "/video.mjpg", color: "/d436/color.mjpg", depth: "/d436/depth.mjpg" };
   const NEXT = { cam: null, color: null, depth: "cam" };
-  let main = "cam", videoOn = true, videoSrcSet = false, linkOk = false;
+  let main = "cam", videoOn = true, videoSrcSet = false, linkOk = false, view = "drive";
   const wasUp = { d436: null, cam: null };
   function videoAttach(on) {
     if (on && !videoSrcSet) {
@@ -297,7 +357,7 @@ input[type=range] { width:100%; accent-color:var(--accent); margin:0; }
   function setMain(src) {
     main = src;
     document.querySelectorAll("#srcsel button").forEach((b) => b.classList.toggle("on", b.dataset.src === main));
-    videoAttach(false); videoAttach(videoOn && linkOk);
+    videoAttach(false); videoAttach(videoOn && linkOk && view === "drive");
     if (lastState) render(lastState);
   }
   document.querySelectorAll("#srcsel button").forEach((b) => b.addEventListener("click", () => setMain(b.dataset.src)));
@@ -310,7 +370,7 @@ input[type=range] { width:100%; accent-color:var(--accent); margin:0; }
   $("vtoggle").addEventListener("click", () => {
     videoOn = !videoOn;
     $("vtoggle").textContent = videoOn ? "All video off" : "All video on";
-    videoAttach(videoOn && linkOk);
+    videoAttach(videoOn && linkOk && view === "drive");
   });
 
   function chip(el, text, cls) { el.textContent = text; el.className = "chip mono" + (cls ? " " + cls : ""); }
@@ -350,7 +410,7 @@ input[type=range] { width:100%; accent-color:var(--accent); margin:0; }
     chip($("c-cam"), !c.ok ? "CAM off" : camSlow ? "CAM " + fmt(c.fps, 0) + " fps" : "CAM on", c.ok && !camSlow ? "ok" : "warn");
     const standby = d.enabled === false;
     // A camera that comes back (service restart, cable re-seated) needs its <img> streams reopened.
-    if ((wasUp.d436 === false && d.connected) || (wasUp.cam === false && c.ok)) { videoAttach(false); videoAttach(videoOn && linkOk); }
+    if ((wasUp.d436 === false && d.connected) || (wasUp.cam === false && c.ok)) { videoAttach(false); videoAttach(videoOn && linkOk && view === "drive"); }
     wasUp.d436 = !!d.connected; wasUp.cam = !!c.ok;
     const d436Slow = d.connected && d.fps < 10;
     chip($("c-d436"), standby ? "D436 standby" : !d.connected ? "D436 off" : d436Slow ? "D436 " + fmt(d.fps, 0) + " fps" : "D436 on",
@@ -388,6 +448,83 @@ input[type=range] { width:100%; accent-color:var(--accent); margin:0; }
     es.onmessage = (e) => { lastEvent = Date.now(); try { render(JSON.parse(e.data)); } catch (err) { /* ignore a torn frame */ } };
     es.onerror = () => { es.close(); setTimeout(connect, 1000); };
   }
+  // ---- Mind view -------------------------------------------------------------------------
+  const PARTS = ["identity", "style", "rules"];
+  let mindDefaults = {}, mindSchema = {}, mindTimer = null;
+  const getJSON = (p) => fetch(p, { cache: "no-store" }).then((r) => r.json());
+  function setMsg(id, text, cls) { $(id).textContent = text; $(id).className = "msg" + (cls ? " " + cls : ""); }
+  async function loadMind() {
+    try {
+      const c = await getJSON("/mind/config");
+      if (c.error) throw new Error(c.error);
+      mindDefaults = c.defaults || {}; mindSchema = c.schema || {};
+      PARTS.forEach((k) => { $("p-" + k).value = (c.parts || {})[k] || ""; });
+      $("m-state").textContent = c.state || "--";
+      $("m-folder").textContent = c.folder || "";
+      const box = $("m-settings"); box.textContent = "";
+      Object.keys(mindSchema).forEach((k) => {
+        const sc = mindSchema[k];
+        const name = document.createElement("span"); name.className = "k"; name.textContent = k;
+        const inp = document.createElement("input"); inp.type = "number"; inp.id = "s-" + k; inp.value = c.settings[k];
+        inp.min = sc.min; inp.max = sc.max; inp.step = Number.isInteger(sc.default) ? 1 : 0.1;
+        const help = document.createElement("span"); help.className = "h"; help.textContent = sc.help + " (" + sc.min + "–" + sc.max + ", default " + sc.default + ")";
+        box.append(name, inp, help);
+      });
+      setMsg("m-msg", "Applies from the next reply.");
+      loadPreview("en"); loadEvents();
+    } catch (err) { setMsg("m-msg", "rover-mind unreachable", "bad"); }
+  }
+  async function loadPreview(lang) {
+    try {
+      const p = await getJSON("/mind/preview?lang=" + lang);
+      const pre = $("m-preview"); pre.textContent = "";
+      (p.messages || []).forEach((m) => {
+        const r = document.createElement("span"); r.className = "role"; r.textContent = m.role + "\n";
+        pre.append(r, document.createTextNode(m.content + "\n\n"));
+      });
+    } catch (err) { $("m-preview").textContent = "--"; }
+  }
+  async function loadEvents() {
+    try {
+      const [j, st] = await Promise.all([getJSON("/mind/journal"), getJSON("/mind/state")]);
+      $("m-counts").textContent = st.state + " · wakes " + st.wakes + " · follow-ups " + st.follow_ups + " · interrupts " + st.interrupts;
+      const list = $("m-events"); list.textContent = "";
+      (j.events || []).slice().reverse().forEach((e) => {
+        const row = document.createElement("div"); row.className = "ev " + e.kind;
+        const t = document.createElement("span"); t.className = "t"; t.textContent = (e.ts || "").slice(11, 19);
+        const k = document.createElement("span"); k.className = "k"; k.textContent = e.kind + (e.source ? " · " + e.source : "");
+        const x = document.createElement("span"); x.className = "x";
+        x.textContent = e.text || e.heard || e.by || e.reason || e.error || "";
+        row.append(t, k, x); list.append(row);
+      });
+    } catch (err) { /* keep the last list */ }
+  }
+  function showView(v) {
+    view = v;
+    $("driveview").hidden = v !== "drive"; $("mindview").hidden = v !== "mind";
+    document.querySelectorAll("#viewsel button").forEach((b) => b.classList.toggle("on", b.dataset.view === v));
+    if (v === "mind") { releaseAll(); videoAttach(false); loadMind(); mindTimer = mindTimer || setInterval(loadEvents, 3000); }
+    else { clearInterval(mindTimer); mindTimer = null; videoAttach(videoOn && linkOk && view === "drive"); }
+  }
+  document.querySelectorAll("#viewsel button").forEach((b) => b.addEventListener("click", () => showView(b.dataset.view)));
+  document.querySelectorAll("[data-default]").forEach((b) => b.addEventListener("click", () => {
+    const k = b.dataset.default; if (mindDefaults[k] != null) { $("p-" + k).value = mindDefaults[k]; setMsg("m-msg", "Default restored here; press Save prompt to use it."); }
+  }));
+  document.querySelectorAll("[data-preview]").forEach((b) => b.addEventListener("click", () => loadPreview(b.dataset.preview)));
+  $("m-reload").addEventListener("click", loadMind);
+  $("m-save").addEventListener("click", async () => {
+    const parts = {}; PARTS.forEach((k) => { parts[k] = $("p-" + k).value; });
+    const r = await post("/mind/config", { parts });
+    if (r.result === "ok") { setMsg("m-msg", "Saved " + new Date().toLocaleTimeString("sv-SE") + " · applies from the next reply", "ok"); loadPreview("en"); }
+    else setMsg("m-msg", r.error || "not saved", "bad");
+  });
+  $("s-save").addEventListener("click", async () => {
+    const settings = {}; Object.keys(mindSchema).forEach((k) => { settings[k] = Number($("s-" + k).value); });
+    const r = await post("/mind/config", { settings });
+    if (r.result === "ok") setMsg("s-msg", "Saved " + new Date().toLocaleTimeString("sv-SE"), "ok");
+    else setMsg("s-msg", r.error || "not saved", "bad");
+  });
+
   connect();
   setInterval(() => {
     const age = Date.now() - lastEvent;
@@ -396,7 +533,7 @@ input[type=range] { width:100%; accent-color:var(--accent); margin:0; }
     chip($("c-link"), !ok ? "LINK lost" : age > 400 ? "LINK " + age + " ms" : "LINK ok", !ok ? "bad" : age > 400 ? "warn" : "ok");
     if (!ok && pressed.size) releaseAll();
     linkOk = !!ok;
-    videoAttach(videoOn && linkOk);
+    videoAttach(videoOn && linkOk && view === "drive");
   }, 250);
 })();
 </script>

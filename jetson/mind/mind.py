@@ -321,6 +321,86 @@ def tone(freq=880.0, seconds=0.12, rate=RATE, volume=0.3):
     return wav_bytes(a.tobytes(), rate)
 
 
+# Settings Paul can change from the console's Mind view: (default, minimum, maximum, what it does).
+SETTINGS = {
+    "follow_s": (8.0, 0.0, 30.0, "seconds after a reply in which no name is needed"),
+    "max_tokens": (110, 20, 400, "longest reply, in tokens"),
+    "temperature": (0.9, 0.0, 1.5, "higher = more varied wording"),
+    "history_messages": (6, 0, 20, "earlier messages sent with each question"),
+    "tts_speed": (1.1, 0.8, 1.5, "speaking speed"),
+    "tts_steps": (10, 2, 16, "voice quality steps on the Mac mini (more = slower)"),
+    "barge_ratio": (2.0, 1.2, 6.0, "interrupt when the mic is this many times louder than his own echo"),
+    "barge_hold_s": (0.3, 0.1, 1.5, "that loud for this long"),
+}
+
+
+PROMPT_PARTS = ("identity", "style", "rules")
+
+
+class Config:
+    """The live prompt parts (identity.md, style.md, rules.md) and settings.json in /config (a host folder),
+    read again whenever a file changes, so an edit in the Mind view applies from the next reply. The
+    repository's jetson/mind/prompt/*.md seed the folder and are the defaults."""
+
+    def __init__(self, folder, seed_dir):
+        self.folder = folder
+        os.makedirs(folder, exist_ok=True)
+        self.settings_path = os.path.join(folder, "settings.json")
+        self.seed = {k: open(os.path.join(seed_dir, k + ".md"), encoding="utf-8").read().strip() for k in PROMPT_PARTS}
+        for k in PROMPT_PARTS:
+            if not os.path.exists(self.path(k)):
+                self.write_part(k, self.seed[k])
+        self._cache = {}
+
+    def path(self, part):
+        return os.path.join(self.folder, part + ".md")
+
+    def _read(self, path, parse):
+        try:
+            m = os.path.getmtime(path)
+        except OSError:
+            return None
+        hit = self._cache.get(path)
+        if hit and hit[0] == m:
+            return hit[1]
+        with open(path, encoding="utf-8") as f:
+            value = parse(f.read())
+        self._cache[path] = (m, value)
+        return value
+
+    def parts(self):
+        return {k: (self._read(self.path(k), str.strip) or "").strip() for k in PROMPT_PARTS}
+
+    def settings(self):
+        saved = self._read(self.settings_path, json.loads) or {}
+        return {k: saved.get(k, d) for k, (d, lo, hi, _) in SETTINGS.items()}
+
+    def write_part(self, part, text):
+        if part not in PROMPT_PARTS:
+            raise ValueError("unknown prompt part: " + str(part))
+        text = (text or "").strip()
+        if len(text) > 4000:
+            raise ValueError(part + " must be at most 4000 characters")
+        with open(self.path(part) + ".tmp", "w", encoding="utf-8") as f:
+            f.write(text + "\n")
+        os.replace(self.path(part) + ".tmp", self.path(part))
+
+    def write_settings(self, new):
+        cur = self.settings()
+        for k, v in (new or {}).items():
+            if k not in SETTINGS:
+                raise ValueError("unknown setting: " + k)
+            d, lo, hi, _ = SETTINGS[k]
+            v = type(d)(v)
+            if not lo <= v <= hi:
+                raise ValueError(f"{k} must be {lo}-{hi}")
+            cur[k] = v
+        with open(self.settings_path + ".tmp", "w", encoding="utf-8") as f:
+            json.dump(cur, f, indent=1)
+        os.replace(self.settings_path + ".tmp", self.settings_path)
+        return cur
+
+
 class Journal:
     def __init__(self, folder):
         self.folder = folder
@@ -338,7 +418,7 @@ class Journal:
 class Mind:
     def __init__(self, args):
         self.a = args
-        self.persona = open(args.persona, encoding="utf-8").read().strip()
+        self.cfg = Config(args.config, args.prompt_dir)
         self.journal = Journal(args.journal)
         self.wake = threading.Event()
         self.vad = make_vad(args.vad_model)
@@ -350,7 +430,7 @@ class Mind:
         self.state = "starting"
         self.speaking = False
         self.recent = deque(maxlen=int(1.0 * RATE / FRAME))     # pre-roll and noise level
-        self.history = deque(maxlen=6)                           # last turns for context
+        self.history = deque(maxlen=40)                          # last turns; the setting decides how many are sent
 
     # --- services -------------------------------------------------------------------------
     def transcribe(self, pcm):
@@ -360,13 +440,40 @@ class Mind:
         with urllib.request.urlopen(req, timeout=30) as r:
             return json.loads(r.read()).get("text", "").strip()
 
-    def reply_stream(self, heard, interrupted=False):
+    def state_line(self):
+        """'Right now' facts filled in for every reply, so the model talks about the real battery, not a script."""
+        bits = [datetime.now().strftime("%A %H:%M")]
+        try:
+            with urllib.request.urlopen(self.a.control + "/api/state", timeout=0.4) as r:
+                st = json.loads(r.read())
+            v = st.get("battery_v")
+            if v:
+                bits.append(f"battery {v:.1f} V ({st.get('battery_state', '?')}; 12.6 V is full, 10.5 V is low)")
+            if st.get("estop"):
+                bits.append("your emergency stop is on")
+        except Exception:
+            pass
+        if time.monotonic() < self.convo_until:
+            bits.append("you are in the middle of a conversation with Paul")
+        return "Right now: " + "; ".join(bits) + "."
+
+    def messages(self, heard, interrupted=False):
+        """Exactly what Gemma receives: the prompt parts, the live state and the code's rules as the system
+        message, then the recent history and the new words."""
         rule = "이번 답은 반드시 한국어로, 반말로 짧게." if HANGUL.search(heard) else "Answer in English."
         if interrupted:
             rule += (" Paul just cut you off mid-answer. Drop what you were saying: do not finish it, repeat it or"
                      " go back to it. Reply only to his new words, briefly.")
-        messages = [{"role": "system", "content": self.persona + " " + rule}, *self.history, {"role": "user", "content": heard}]
-        body = json.dumps({"messages": messages, "max_tokens": 110, "temperature": 0.9, "stream": True,
+        parts = self.cfg.parts()
+        system = "\n\n".join([*(parts[k] for k in PROMPT_PARTS if parts[k]), self.state_line(), rule])
+        n = int(self.cfg.settings()["history_messages"])
+        past = list(self.history)[-n:] if n else []
+        return [{"role": "system", "content": system}, *past, {"role": "user", "content": heard}]
+
+    def reply_stream(self, heard, interrupted=False):
+        st = self.cfg.settings()
+        messages = self.messages(heard, interrupted)
+        body = json.dumps({"messages": messages, "max_tokens": int(st["max_tokens"]), "temperature": float(st["temperature"]), "stream": True,
                            "chat_template_kwargs": {"enable_thinking": False}}).encode()
         req = urllib.request.Request(self.a.llm + "/v1/chat/completions", data=body,
                                      headers={"Content-Type": "application/json"})
@@ -378,10 +485,11 @@ class Mind:
         at fewer steps if the Mac mini does not answer."""
         lang = "ko" if HANGUL.search(text) else "en"
         last = None
-        for url, steps, timeout in ((self.a.tts, self.a.tts_steps, 10), (self.a.tts_fallback, self.a.fallback_steps, 60)):
+        st = self.cfg.settings()
+        for url, steps, timeout in ((self.a.tts, int(st["tts_steps"]), 10), (self.a.tts_fallback, self.a.fallback_steps, 60)):
             if not url:
                 continue
-            body = json.dumps({"text": text, "lang": lang, "voice": self.a.voice, "steps": steps, "speed": self.a.tts_speed}).encode()
+            body = json.dumps({"text": text, "lang": lang, "voice": self.a.voice, "steps": steps, "speed": float(st["tts_speed"])}).encode()
             try:
                 with urllib.request.urlopen(urllib.request.Request(url + "/say", data=body, headers={"Content-Type": "application/json"}),
                                             timeout=timeout) as r:
@@ -405,6 +513,9 @@ class Mind:
         ("sound", pre-roll frames) if a sound louder than Kalman's own echo did, else None."""
         env = play_envelope(wav)
         pre = deque(maxlen=int(0.6 * RATE / FRAME))
+        st = self.cfg.settings()
+        self.dtd.ratio = float(st["barge_ratio"])
+        self.dtd.hold = max(1, int(float(st["barge_hold_s"]) * RATE / FRAME))
         for _ in range(20):
             self.drain()                      # line the microphone up with the start of playback
             self.dtd.reset(env)
@@ -530,7 +641,7 @@ class Mind:
             # An interrupted answer stays in the history only as a stub, so the model does not pick it up again.
             kept = "(I started answering but Paul cut me off.)" if cut else reply
             self.history.extend([{"role": "user", "content": heard}, {"role": "assistant", "content": kept}])
-            self.convo_until = time.monotonic() + 0.3 + self.a.follow_s
+            self.convo_until = time.monotonic() + 0.3 + float(self.cfg.settings()["follow_s"])
             if cut and isinstance(cut, tuple):           # a sound: listen to what Paul is saying, from just before it
                 self.counts["interrupts"] += 1
                 seg = Endpointer(self.vad, start_s=3.0)
@@ -642,7 +753,25 @@ class Mind:
                 self.state = "listening"
 
 
-def control_server(mind, port):
+JOURNAL_KINDS = ("wake", "heard", "reply", "interrupted", "conversation_end", "ignored", "error")
+
+
+def recent_journal(folder, n=40):
+    """The last n conversation events (newest last) from today's and yesterday's journal files."""
+    out = []
+    for name in sorted(f for f in os.listdir(folder) if f.endswith(".jsonl"))[-2:]:
+        with open(os.path.join(folder, name), encoding="utf-8") as f:
+            for line in f:
+                try:
+                    rec = json.loads(line)
+                except ValueError:
+                    continue
+                if rec.get("kind") in JOURNAL_KINDS:
+                    out.append(rec)
+    return out[-n:]
+
+
+def control_server(mind, port, hosts=("127.0.0.1",)):
     class H(BaseHTTPRequestHandler):
         def log_message(self, *a):
             pass
@@ -656,9 +785,34 @@ def control_server(mind, port):
             self.wfile.write(body)
 
         def do_GET(self):
-            self._json(200, {"state": mind.state, **mind.counts}) if self.path == "/state" else self._json(404, {"error": "not found"})
+            path, _, query = self.path.partition("?")
+            if path == "/state":
+                return self._json(200, {"state": mind.state, **mind.counts})
+            if path == "/config":
+                return self._json(200, {"parts": mind.cfg.parts(), "defaults": mind.cfg.seed, "state": mind.state_line(),
+                                        "settings": mind.cfg.settings(),
+                                        "schema": {k: {"default": d, "min": lo, "max": hi, "help": h} for k, (d, lo, hi, h) in SETTINGS.items()},
+                                        "folder": "/home/paulcho/kalman/config"})
+            if path == "/preview":
+                ko = "lang=ko" in query
+                return self._json(200, {"messages": mind.messages("오늘 기분 어때?" if ko else "How are you today?")})
+            if path == "/journal":
+                return self._json(200, {"events": recent_journal(mind.a.journal)})
+            return self._json(404, {"error": "not found"})
 
         def do_POST(self):
+            if self.path == "/config":
+                n = int(self.headers.get("Content-Length") or 0)
+                try:
+                    body = json.loads(self.rfile.read(n)) if 0 < n <= 32768 else {}
+                    for k, v in (body.get("parts") or {}).items():
+                        mind.cfg.write_part(k, v)
+                    if "settings" in body:
+                        mind.cfg.write_settings(body["settings"])
+                except (ValueError, TypeError) as e:
+                    return self._json(400, {"error": str(e)})
+                mind.journal.write("config", changed=sorted(body))
+                return self._json(200, {"result": "ok", "parts": mind.cfg.parts(), "settings": mind.cfg.settings()})
             if self.path != "/listen":
                 return self._json(404, {"error": "not found"})
             if mind.state != "listening":
@@ -666,8 +820,13 @@ def control_server(mind, port):
             mind.wake.set()
             self._json(200, {"result": "ok"})
 
-    httpd = ThreadingHTTPServer(("127.0.0.1", port), H)
-    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    for host in hosts:                  # loopback, and the docker network gateway so rover-control can proxy it
+        try:
+            httpd = ThreadingHTTPServer((host, port), H)
+        except OSError as e:
+            print(f"control port not opened on {host}: {e}", flush=True)
+            continue
+        threading.Thread(target=httpd.serve_forever, daemon=True).start()
 
 
 def main():
@@ -681,18 +840,20 @@ def main():
     ap.add_argument("--voice", default="M1")
     ap.add_argument("--language", default="en", help="Whisper language for now (English-only model setting)")
     ap.add_argument("--model-name", default="gemma-4-E2B-it-Q4_K_M", help="recorded in the journal")
-    ap.add_argument("--persona", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "persona.txt"))
+    ap.add_argument("--prompt-dir", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "prompt"),
+                    help="default prompt parts (identity.md, style.md, rules.md)")
+    ap.add_argument("--control", default="http://127.0.0.1:8091", help="rover-control, for the live battery and e-stop state")
     ap.add_argument("--journal", default="/journal")
     ap.add_argument("--voice-dir", default="/voice")
-    ap.add_argument("--follow-s", type=float, default=8.0, help="after a reply, seconds in which no name is needed")
-    ap.add_argument("--tts-steps", type=int, default=10, help="Mac mini: 0.27-0.34 s per audio second at 10 steps")
     ap.add_argument("--fallback-steps", type=int, default=6, help="Jetson: 10 steps took 1.3-1.7 s per audio second, 6 about 0.6-0.8")
-    ap.add_argument("--tts-speed", type=float, default=1.1)
+    ap.add_argument("--config", default="/config", help="live persona.md and settings.json (the Mind view edits them)")
     ap.add_argument("--port", type=int, default=8096)
+    ap.add_argument("--hosts", nargs="+", default=["127.0.0.1", "172.18.0.1"],
+                    help="where the control port listens: loopback and the 'rover' docker network gateway")
     ap.add_argument("--vad-model", default="/models/sherpa/silero_vad.onnx")
     args = ap.parse_args()
     mind = Mind(args)
-    control_server(mind, args.port)
+    control_server(mind, args.port, args.hosts)
     mind.run()
 
 

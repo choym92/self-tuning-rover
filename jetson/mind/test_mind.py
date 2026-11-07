@@ -205,5 +205,64 @@ class JournalTests(unittest.TestCase):
             self.assertEqual(json.loads(lines[1])["text"], "음.")
 
 
+class ConfigTests(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.TemporaryDirectory()
+        seed = os.path.join(self.tmp.name, "seed")
+        os.makedirs(seed)
+        for k, v in (("identity", "You are Kalman, a small robot."), ("style", "Short sentences."), ("rules", "Be honest.")):
+            with open(os.path.join(seed, k + ".md"), "w", encoding="utf-8") as f:
+                f.write(v + "\n")
+        self.cfg = mind.Config(os.path.join(self.tmp.name, "config"), seed)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_parts_seeded_then_edited(self):
+        self.assertEqual(self.cfg.parts()["identity"], "You are Kalman, a small robot.")
+        import time as _t
+        _t.sleep(0.01)
+        self.cfg.write_part("rules", "Never mention the battery unless asked.")
+        self.assertEqual(self.cfg.parts()["rules"], "Never mention the battery unless asked.")
+        with self.assertRaises(ValueError):
+            self.cfg.write_part("tools", "x")
+        with self.assertRaises(ValueError):
+            self.cfg.write_part("style", "x" * 5000)
+
+    def test_settings_defaults_ranges_and_types(self):
+        self.assertEqual(self.cfg.settings()["follow_s"], 8.0)
+        out = self.cfg.write_settings({"follow_s": "12", "max_tokens": 80})
+        self.assertEqual((out["follow_s"], out["max_tokens"]), (12.0, 80))
+        self.assertEqual(self.cfg.settings()["max_tokens"], 80)
+        for bad in ({"follow_s": 99}, {"nope": 1}, {"temperature": "hot"}):
+            with self.assertRaises(ValueError):
+                self.cfg.write_settings(bad)
+
+    def test_messages_layer_parts_state_and_history(self):
+        import types
+        m = mind.Mind.__new__(mind.Mind)
+        m.cfg = self.cfg
+        m.a = types.SimpleNamespace(control="http://127.0.0.1:9")   # rover-control unreachable: state has only the time
+        m.convo_until = 0.0
+        m.history = mind.deque([{"role": "user", "content": str(i)} for i in range(10)], maxlen=40)
+        self.cfg.write_settings({"history_messages": 2})
+        msgs = m.messages("How are you?")
+        system = msgs[0]["content"].split("\n\n")
+        self.assertEqual(system[:3], ["You are Kalman, a small robot.", "Short sentences.", "Be honest."])
+        self.assertTrue(system[3].startswith("Right now: "))
+        self.assertEqual(system[4], "Answer in English.")
+        self.assertEqual([x["content"] for x in msgs[1:]], ["8", "9", "How are you?"])
+        self.assertIn("반말", m.messages("배고파?")[0]["content"])
+
+    def test_recent_journal_keeps_conversation_events(self):
+        j = mind.Journal(os.path.join(self.tmp.name, "journal"))
+        j.write("start", mic="x")
+        j.write("heard", text="Hi")
+        j.write("while_speaking", text="x")
+        j.write("reply", text="Hey.")
+        self.assertEqual([e["kind"] for e in mind.recent_journal(j.folder)], ["heard", "reply"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -36,6 +36,18 @@ docker run -d --name rover-mind --network host --device /dev/snd --group-add aud
 Needs Whisper's HTTP port on the host: `rover-stt` runs `whisper-server` on `0.0.0.0:8080` inside the
 container, published as `127.0.0.1:8095`.
 
-Journal: `/home/paulcho/kalman/journal/YYYY-MM-DD.jsonl`, one event per line (`start`, `wake`,
-`heard`, `reply`, `error`), outside the repository. Audio is not kept. The persona is
-`persona.txt` (also read by `jetson/voice/talk.py`).
+Journal: `/home/paulcho/kalman/journal/YYYY-MM-DD.jsonl`, one event per line, outside the repository.
+Audio is not kept.
+
+Prompt (assembled for every reply, shown in the console's Mind view under "What Gemma receives"):
+identity + style + rules (editable, `/home/paulcho/kalman/config/*.md`, seeded from `prompt/*.md` here,
+which `jetson/voice/talk.py` also reads) + a "Right now" line filled in each time (time, real battery
+voltage from rover-control, e-stop, whether a conversation is going on) + the language rule (+ the
+"you were cut off" rule after an interruption) + recent history + the new words. Settings
+(`settings.json`: follow-up seconds, reply length, temperature, history, voice speed and steps,
+barge-in ratio and hold) are edited in the same view and apply from the next reply. The console reaches
+this control port through the `rover` network gateway (`--hosts 127.0.0.1 172.18.0.1`); it changes
+words and voice settings only, never motion.
+
+Run command now also mounts `-v /home/paulcho/kalman/config:/config`.
+

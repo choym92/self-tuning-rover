@@ -68,7 +68,10 @@ things are normal and show a number only when something is off (link age over 40
 15 Hz, camera under 15 fps, D436 under 10 fps); the battery voltage is always shown. The raw IMU
 and UART details sit under "Sensors" in the Status card. `BRAIN` is the LLM on the home Mac mini, checked every
 2 s through the `rover-brainlink` tunnel (`--brain`, read-only); "Servers" shows its latency and the Jetson's
-memory and temperature. A brain outage never blocks driving. Steering is camera-first: A turns the view left and D right whether driving
+memory and temperature. A brain outage never blocks driving.
+The header's Drive / Mind switch opens the Mind view (proxied from rover-mind under `/mind/`): the
+prompt parts and settings Kalman talks with, exactly what Gemma receives, and the recent conversation.
+While a text field has focus the drive, head and Space shortcuts are off; the E-STOP button still works. Steering is camera-first: A turns the view left and D right whether driving
 forward or backward (the wheel mix is mirrored while reversing). The video panel plays `/video.mjpg` while the telemetry link is up and can be
 switched off on the page to save bandwidth (about 1.4 MB/s at 1280x720, 20 fps). The source
 buttons on the picture choose what fills the big view; the small view shows the next source at

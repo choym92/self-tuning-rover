@@ -23,7 +23,9 @@ import tempfile
 import time
 
 HOST = "paulcho@192.168.1.238"
-SYSTEM = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "mind", "persona.txt"), encoding="utf-8").read().strip()
+# The same prompt parts rover-mind starts from (it adds the live "Right now" state on the rover).
+SYSTEM = "\n\n".join(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "mind", "prompt", k + ".md"),
+                             encoding="utf-8").read().strip() for k in ("identity", "style", "rules"))
 # macOS voices, best first; only the ones installed are used (Premium voices are a free download
 # in System Settings > Accessibility > Spoken Content > System Voice > Manage Voices).
 HANGUL = re.compile(r"[\uac00-\ud7a3]")

@@ -243,6 +243,57 @@ class FakeBrainHandler(server.BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
+class FakeMindHandler(server.BaseHTTPRequestHandler):
+    def log_message(self, *a):
+        pass
+
+    def _send(self, code, body):
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_GET(self):
+        self._send(200, b'{"parts": {"identity": "You are Kalman."}}' if self.path == "/config" else b"{}")
+
+    def do_POST(self):
+        n = int(self.headers.get("Content-Length") or 0)
+        body = self.rfile.read(n)
+        self._send(400 if b"bad" in body else 200, b'{"echo": ' + body + b'}')
+
+
+class MindProxyTests(unittest.TestCase):
+    def test_get_and_post_pass_through(self):
+        fake = server.ThreadingHTTPServer(("127.0.0.1", 0), FakeMindHandler)
+        threading.Thread(target=fake.serve_forever, daemon=True).start()
+        ctl = server.Controller(FakeLink(), cap=80, allow_drive=False, synced=lambda: True)
+        page = os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html")
+        httpd = server.ThreadingHTTPServer(("127.0.0.1", 0), server.make_handler(ctl, page, server.Camera(), server.EyesLink(), server.BrainLink(),
+                                                                              "http://127.0.0.1:%d" % fake.server_address[1]))
+        threading.Thread(target=httpd.serve_forever, daemon=True).start()
+        base = "http://127.0.0.1:%d" % httpd.server_address[1]
+        with urllib.request.urlopen(base + "/mind/config", timeout=3) as r:
+            self.assertEqual(json.loads(r.read())["parts"]["identity"], "You are Kalman.")
+        req = urllib.request.Request(base + "/mind/config", data=b'{"settings": {"follow_s": 5}}', method="POST")
+        with urllib.request.urlopen(req, timeout=3) as r:
+            self.assertEqual(json.loads(r.read())["echo"]["settings"]["follow_s"], 5)
+        with self.assertRaises(urllib.error.HTTPError) as e:
+            urllib.request.urlopen(urllib.request.Request(base + "/mind/config", data=b'{"bad": 1}', method="POST"), timeout=3)
+        self.assertEqual(e.exception.code, 400)
+        httpd.shutdown(); httpd.server_close(); fake.shutdown(); fake.server_close()
+
+    def test_unreachable_mind_is_503(self):
+        ctl = server.Controller(FakeLink(), cap=80, allow_drive=False, synced=lambda: True)
+        page = os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html")
+        httpd = server.ThreadingHTTPServer(("127.0.0.1", 0), server.make_handler(ctl, page, server.Camera(), server.EyesLink(), server.BrainLink(), "http://127.0.0.1:9"))
+        threading.Thread(target=httpd.serve_forever, daemon=True).start()
+        with self.assertRaises(urllib.error.HTTPError) as e:
+            urllib.request.urlopen("http://127.0.0.1:%d/mind/config" % httpd.server_address[1], timeout=3)
+        self.assertEqual(e.exception.code, 503)
+        httpd.shutdown(); httpd.server_close()
+
+
 class BrainTests(unittest.TestCase):
     def test_brain_link_reports_up_and_down(self):
         fake = server.ThreadingHTTPServer(("127.0.0.1", 0), FakeBrainHandler)
