@@ -560,6 +560,12 @@ answered "난 칼만이야" on both. Mini memory free fell from 80 % to 71 % wit
 first request after loading took 625 ms of prompt time (warm-up). Not yet measured: the Jetson-to-mini
 network on the real path (ping 5-96 ms over 2.4 GHz WiFi).
 
+Through the rover's tunnel (`rover-brainlink`, same day 16:35 EST), measured on the Jetson, eight
+short replies (8-12 tokens) after one warm-up: Mac mini via tunnel median 0.30 s (0.27-0.40), Jetson
+local Gemma median 0.38 s (0.33-0.46). One `/health` round trip through the tunnel took 549 ms
+(single sample, not explained). The tunnel reconnected about 3 s after its SSH session was killed on
+the mini.
+
 ## Rover microphone and Whisper: can it understand Paul? (2026-11-07, Jetson on the rover)
 
 Camera microphone (`plughw:0,0`, gain 100 %), Paul speaking, `jetson/voice/mic_test.py`, six English

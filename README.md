@@ -52,6 +52,7 @@ direction belongs in `docs/STATUS.md`.
 | [jetson/control/](jetson/control/README.md) | The driving console: control server (owns the UART), browser page, safety rules, keys |
 | [jetson/eyes/](jetson/eyes/README.md) | D436 eyes service: colour and depth streams for the console, standby, reconnect |
 | [jetson/voice/](jetson/voice/README.md) | One spoken turn: rover microphone → Whisper → Gemma → Supertonic → rover speaker |
+| [jetson/brainlink/](jetson/brainlink/README.md) | One-way SSH tunnel from the rover to the LLM on the Mac mini |
 | [macmini/](macmini/ai.rover.brain.plist) | The rover's LLM on the home Mac mini: the LaunchAgent that serves Gemma on its loopback (`docs/preflight.md`, 2026-11-07) |
 | [jetson/llm/](jetson/llm/README.md), [jetson/tts/](jetson/tts/README.md) | llama.cpp server runbook and the TTS containers (Supertonic 3, Kokoro) |
 | [docs/voice-orchestration.md](docs/voice-orchestration.md) | Working voice/orchestration architecture, safety boundary, phased implementation and open UX decisions |
