@@ -455,6 +455,9 @@ class Mind:
             pass
         if time.monotonic() < self.convo_until:
             bits.append("you are in the middle of a conversation with Paul")
+        # Stage 3 replaces this with what the camera actually sees; until then the model must know it is blind
+        # (on 2026-11-07 it described a window, a shadow and a TV it never saw).
+        bits.append("your camera is not connected to you yet, so you cannot see anything")
         return "Right now: " + "; ".join(bits) + "."
 
     def messages(self, heard, interrupted=False):
