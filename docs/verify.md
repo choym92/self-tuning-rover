@@ -25,6 +25,7 @@ Contents (search these headings first; open only the section you need):
 - [Audio8 TTS Preview 0.1B (ONNX INT8) against Supertonic 3 on the Jetson CPU (2026-11-07)](#audio8-tts-preview-01b-onnx-int8-against-supertonic-3-on-the-jetson-cpu-2026-11-07)
 - [Console stage 2: camera view in the page, D436 connected on the rover (2026-11-07, Jetson on the rover)](#console-stage-2-camera-view-in-the-page-d436-connected-on-the-rover-2026-11-07-jetson-on-the-rover)
 - [Eyes service: D436 colour and depth in the console page (2026-11-07, Jetson on the rover)](#eyes-service-d436-colour-and-depth-in-the-console-page-2026-11-07-jetson-on-the-rover)
+- [Rover microphone and Whisper: can it understand Paul? (2026-11-07, Jetson on the rover)](#rover-microphone-and-whisper-can-it-understand-paul-2026-11-07-jetson-on-the-rover)
 - [Pan-tilt settle correction (2026-11-07, Jetson on the rover)](#pan-tilt-settle-correction-2026-11-07-jetson-on-the-rover)
 
 ## Per-layer checks
@@ -535,6 +536,38 @@ samples, 73 MiB; 5 MP big + D436 colour small at 5 fps 23%. Camera standby (`POS
 the first frame and the stream was back at 30 fps 3 s later. The eyes container restarts in 3 s. The tilt bracket shows
 as the black lower-right region in both D436 views. The page's three-source selector and the small
 picture were checked in the built-in browser; 17 unit tests pass on the Mac (15 control, 2 eyes).
+
+## Rover microphone and Whisper: can it understand Paul? (2026-11-07, Jetson on the rover)
+
+Camera microphone (`plughw:0,0`, gain 100 %), Paul speaking, `jetson/voice/mic_test.py`, six English
+phrases per run, clips in `private/mic-test/`. English only: Korean and a noisy room were not tested,
+and the runs marked "old cue" may have lost the start of a phrase because the prompt appeared before
+the recording opened.
+
+| Run | Quiet RMS | Speech / quiet | Mean text match | Meaning of the commands |
+|---|---|---|---|---|
+| 1 m, "Hey Wall-E", old cue | 597 | 3.6x | 0.74 | 4 of 6 |
+| 2 m, "Hey Wall-E", old cue | 668 | 2.4x | 0.77 | 5 of 6, missed `stop` |
+| 1 m, "Hey Kalman", fixed cue | 470 | 4.8x | 0.72 | 5 of 5 (one phrase Paul fumbled) |
+
+The last run's peak reached 32,767 once (slight clipping at full gain). The source of the quiet-room
+level is unknown; the Jetson fan was at PWM 76/255.
+
+Same six clips plus the quiet clip, name recognized in the transcript:
+
+| Model | Name right | Quiet clip |
+|---|---|---|
+| base, no prompt | 1/6 | clean |
+| base, prompt `Kalman is a small robot. Hey Kalman.` | 6/6 | clean |
+| base, prompt `Kalman` | 4/6 | clean |
+| large-v3-turbo, no prompt | 1/6 | clean |
+| large-v3-turbo, same sentence prompt | 4/6 | invented "Hey Kalman." |
+
+Reading: the camera microphone is good enough to start with at 1-2 m in a quiet room, and the larger
+model did not improve the commands. One run of seven clips; a prompt biases the text towards the
+name, so it may only help transcription and must not decide wake-up. large-v3-turbo took about 0.7 s
+per 5 s clip on the MacBook (first load 12 s); the Mac mini is unmeasured. The model was removed
+afterwards.
 
 ## Pan-tilt settle correction (2026-11-07, Jetson on the rover)
 
