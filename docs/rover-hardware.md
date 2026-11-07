@@ -72,6 +72,7 @@ Services on the Jetson (all published on loopback unless noted; the Mac reaches 
 - WiFi: two drops on 2026-11-07 (SSH tunnel reset while the Jetson stayed up); WiFi power saving not yet checked. The Jetson boots at 1969 until WiFi time sync arrives, so early logs have wrong timestamps. `docs/setup-log.md`.
 - Ethernet is physically blocked by the chassis; use WiFi or the USB-C link. `docs/setup-log.md` 2026-11-06.
 - Power: low-voltage thresholds in the console are 10.5 V warn and 9.6 V refuse drive/reset. `jetson/control/README.md`. Charge from the kit's 12.6 V charger. Cells fall to about 10.2 V under drive load (`docs/setup-log.md` 2026-11-06).
+- Charging: the charger plug and the D436 cable collide at the DC5521 jack, so unplug the D436 to charge (it reconnects by itself). Plugging the charger has rebooted the running rover; a servo-bus cable routed past the jack cut power when touched until Paul fixed it on 2026-11-07. `docs/setup-log.md` 2026-11-07.
 - Power-off (reported by Paul 2026-11-07, not yet in the setup log): the silver button did not power the system off (what it is remains unresolved); shut down with `sudo shutdown -h now`, then pull the DC plug.
 - Power draw by workload (module rail only, not the whole robot): `docs/verify.md` ("Jetson power draw by workload").
 - Memory: Gemma + Whisper + Supertonic use about 5.6 GB of 8 GB; vision on top is tight. `docs/STATUS.md`, `docs/verify.md`.

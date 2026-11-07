@@ -323,3 +323,13 @@ Cells in, Jetson booted on rover power (fan on; R36.5.2 kernel, MAXN_SUPER, abou
   link-lost, 1100 px and 850 px widths, then copied to the rover (page only, no restart). The target
   ring in the head pad grew to 20 px so the 12 px dot sits visibly centred (the old 0.5 px gap looked
   lopsided although the centres were 0.1 px apart).
+- Power and cabling (reported by Paul during the day; the Jetson rebooted several times, each time
+  the five containers had to be started again and the SSH tunnel reopened): plugging the 12.6 V
+  charger into the DC5521 jack rebooted the rover two or three times; a white/red/black three-wire
+  cable (almost certainly the ST3215 servo bus, seen in IMG_9795) loops past the jack and cut the
+  power whenever it was touched, which points at a short at a taped junction or chafed insulation at
+  the plate edge; one WiFi SMA antenna was unscrewed by mistake and put back (signal 74 % -> 100 %
+  after reseating). One clean shutdown was done with `sudo shutdown -h now` from the terminal tab.
+  Afternoon: Paul reports the cable problem fixed (what was done is not recorded yet). Standing
+  rule from Paul: the D436 cable and the charger plug collide at the jack, so the D436 is
+  unplugged while charging; the eyes service reconnects on its own when it is plugged back in.
