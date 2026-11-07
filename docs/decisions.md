@@ -31,6 +31,7 @@ Contents (search these headings first; open only the section you need):
 - [On-robot voice: Supertonic 3, voice M1, for both English and Korean (2026-11-06, DECIDED by Paul)](#on-robot-voice-supertonic-3-voice-m1-for-both-english-and-korean-2026-11-06-decided-by-paul)
 - [The robot's name is Kalman (2026-11-07, DECIDED by Paul)](#the-robots-name-is-kalman-2026-11-07-decided-by-paul)
 - [The rover's LLM runs on the home Mac mini, reached by a rover-side tunnel (2026-11-07, DECIDED by Paul)](#the-rovers-llm-runs-on-the-home-mac-mini-reached-by-a-rover-side-tunnel-2026-11-07-decided-by-paul)
+- [Kalman's mind: staged plan, speed layers and storage (2026-11-07, DECIDED by Paul)](#kalmans-mind-staged-plan-speed-layers-and-storage-2026-11-07-decided-by-paul)
 
 ## AI use: unrestricted — personal project (2026-09-23)
 
@@ -316,3 +317,10 @@ Compared on the Jetson with clocks locked (`docs/verify.md`): YOLO26n 3.6 ms / ~
 - Gemma moved from the Jetson to the always-on Mac mini (M4, 16 GB): same engine and model file, twice the generation speed, identical test-set scores; the Jetson gains about 2.85 GiB for vision (`docs/verify.md`).
 - Transport, Paul's choice of option A: the rover opens a one-way SSH tunnel (`jetson/brainlink/`); the mini's key line allows only a forward to its own `127.0.0.1:8080`, no commands and no reverse forwards. Rejected: the mini dialling the rover (an adversarial review showed the key could run commands, reach the console's e-stop reset and drive, and leave stale listeners) and a LAN port with an API key (the mini's firewall is off and traffic would be cleartext).
 - Consequence: when the Mac mini is off, locked after a restart (FileVault) or unreachable, Kalman cannot talk; motion and safety never depend on it. Which model the mini runs is a separate, later choice.
+
+## Kalman's mind: staged plan, speed layers and storage (2026-11-07, DECIDED by Paul)
+
+- Goal (Paul): a rover that behaves as if it had a mind of its own, enough that people take it for one. The body track in `README.md` (logging, replay, Kalman filter, control, tuning, navigation) stays; this adds the mind on top of the same logs.
+- Stages, each with a test Paul can see: 0 floor (journal, drive time limit, manual/auto arbitration, auto-start, charging point); 1 **listens when called** (`Hey Kalman`, on the rover, no MacBook); 2 **remembers** (conversation memory with Paul approving candidate facts, OpenHebb-style); 3 **looks** (faces and motion turn the head, idle looking around; needs the LLM off the Jetson, done 2026-11-07); 4 **moves on its own** (needs the body track); 5 **improves overnight** (the Mac mini replays the day's logs and conversations). Sound direction needs a microphone array and is not in stage 3.
+- Three speeds: reflex (rover-control, under 100 ms, no LLM), behaviour (`rover-mind` on the Jetson, about 1 s), thought (LLM on the Mac mini, seconds). `rover-mind` uses only rover-control's HTTP API; the LLM proposes typed actions only (`docs/voice-orchestration.md`); a human at the console always wins.
+- Storage: from stage 1 a day-file JSONL journal of events (wake, heard, reply, spoken, errors, timings) outside the repository; from stage 2 one SQLite file on the Mac mini for memory facts and the approval inbox, no database server. The view is a "Mind" tab in the existing console, not a separate site. Audio is not kept; only text after the wake phrase. Retention is still Paul's to set.

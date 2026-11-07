@@ -158,6 +158,24 @@ the final microphone and speaker later.
    after the typed tool boundary is tested.
 10. Add TTS, first with half-duplex behavior, then test AEC if needed.
 
+## Stage 1 plan: listens when called (2026-11-07)
+
+Direction and storage are decided (`docs/decisions.md`, Kalman's mind). Measured inputs: the camera
+microphone works at 1-2 m in a quiet room, and Whisper base with the prompt
+`Kalman is a small robot. Hey Kalman.` wrote the name right 6/6 without inventing text on silence
+(`docs/verify.md`, rover microphone). The LLM answers from the Mac mini through `rover-brainlink`.
+
+1. `rover-mind` container on the Jetson: microphone ring buffer with pre-roll, VAD end-of-speech,
+   Whisper (`rover-stt`) with the name prompt, LLM through `rover-brainlink`, Supertonic sentence by
+   sentence, half-duplex (no listening while speaking), the offline line when the brain is down.
+2. `Hey Kalman` detector on the CPU (candidate: a custom openWakeWord model trained on synthetic
+   speech; to be checked before choosing). The wake decision never comes from Whisper text.
+3. Journal: `/home/paulcho/kalman/journal/YYYY-MM-DD.jsonl` on the Jetson, one event per line
+   (`ts`, `kind` = wake | heard | reply | spoken | error, `text`, `lang`, `ms`, `model`), outside the
+   repository. It is the data the stage 2 memory and the Mind tab will read.
+4. Acceptance: from 2 m, 18 of 20 calls answered; at most one false wake per hour with the TV on;
+   first sound within 3 s of the end of speech; no MacBook involved.
+
 ## Open decisions
 
 Discuss and decide these one at a time before implementation:

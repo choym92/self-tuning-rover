@@ -52,7 +52,14 @@ curl -s http://127.0.0.1:8091/api/state | head -c 300      # through the tunnel:
   on the home Mac mini as a jump host, the Jetson untouched; needs a low-rate
   video mode and a security review before anything is installed).
 
-## Next big piece: the logging / replay / tuning loop (not started)
+## Mind plan (decided 2026-11-07)
+
+Stages and storage: `docs/decisions.md` (Kalman's mind). Done toward it: wake phrase `Hey Kalman`,
+microphone test, LLM moved to the Mac mini with a `BRAIN` chip. Next candidate: stage 1, listens
+when called (`docs/voice-orchestration.md`, stage 1 plan). Pending in parallel: Gemma 4 E4B against
+E2B on the Mac mini.
+
+## Next big piece: the logging / replay / tuning loop (not started; the body track)
 
 The project's thesis (`README.md`): every stream logged with timestamps,
 replayed on the Mac against AprilTag ground truth, scored (RMSE, NIS), and the
