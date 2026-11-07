@@ -61,6 +61,9 @@ main { display:grid; grid-template-columns:minmax(0,1fr) 320px; gap:14px; paddin
 .grid span:nth-child(odd) { color:var(--mute); font-family:var(--sans); font-size:12px; }
 .grid span:nth-child(even) { color:var(--ink); }
 .big { font-size:22px; line-height:26px; font-weight:600; }
+.more summary { color:var(--mute); font-size:12px; cursor:pointer; list-style:none; padding:2px 0; }
+.more summary::before { content:"▸ "; } .more[open] summary::before { content:"▾ "; }
+.more[open] summary { margin-bottom:6px; }
 input[type=range] { width:100%; accent-color:var(--accent); margin:0; }
 .pad { position:relative; width:100%; max-width:200px; aspect-ratio:2/1; margin:0 auto; border:1px solid #2c3948; border-radius:4px; background:#0f161d; }
 .pad .vl { position:absolute; left:50%; top:0; bottom:0; width:1px; background:var(--line); }
@@ -169,11 +172,16 @@ input[type=range] { width:100%; accent-color:var(--accent); margin:0; }
         <span>Battery</span><span id="t-bat" class="big">--</span>
         <span>Speed L / R</span><span id="t-spd">--</span>
         <span>Odometry L / R</span><span id="t-od">--</span>
-        <span>Pan / Tilt</span><span id="t-pt">--</span>
-        <span>Accel (raw)</span><span id="t-acc">--</span>
-        <span>Gyro (raw)</span><span id="t-gyr">--</span>
-        <span>UART</span><span id="t-fb">--</span>
       </div>
+      <details class="more">
+        <summary>Sensors</summary>
+        <div class="grid mono">
+          <span>Pan / Tilt</span><span id="t-pt">--</span>
+          <span>Accel (raw)</span><span id="t-acc">--</span>
+          <span>Gyro (raw)</span><span id="t-gyr">--</span>
+          <span>UART</span><span id="t-fb">--</span>
+        </div>
+      </details>
     </div>
   </aside>
 </main>
@@ -227,7 +235,16 @@ input[type=range] { width:100%; accent-color:var(--accent); margin:0; }
   $("estop").addEventListener("click", estop);
   $("reset").addEventListener("click", () => post("/api/reset").then((j) => { if (j.result !== "ok") $("reason").textContent = j.result; }));
   $("cap").addEventListener("change", (e) => post("/api/cap", { pwm: Number(e.target.value) }));
-  $("cap").addEventListener("input", (e) => { $("capv").textContent = e.target.value + " / 255"; });
+  $("cap").addEventListener("input", (e) => { $("capv").textContent = e.target.value + " / " + e.target.max; });
+  // [ and ] lower / raise the cap by 10 (one step per press; no auto-repeat)
+  document.addEventListener("keydown", (e) => {
+    const step = e.code === "BracketRight" ? 10 : e.code === "BracketLeft" ? -10 : 0;
+    if (!step || e.repeat) return;
+    e.preventDefault();
+    const cap = $("cap"), v = Math.max(Number(cap.min), Math.min(Number(cap.max), Number(cap.value) + step));
+    cap.value = v; $("capv").textContent = v + " / " + cap.max;
+    post("/api/cap", { pwm: v });
+  });
 
   // Head: arrow keys or the buttons nudge the target 5 degrees at 10 Hz while held (50 deg/s; the servos do about 70).
   const HEAD_KEYS = { ArrowLeft: "left", ArrowRight: "right", ArrowUp: "up", ArrowDown: "down" };
@@ -291,10 +308,11 @@ input[type=range] { width:100%; accent-color:var(--accent); margin:0; }
   function render(s) {
     lastState = s;
     const fb = s.feedback || {}, u = s.uart || {};
-    chip($("c-uart"), "UART " + (u.rate_hz || 0) + " Hz", u.rate_hz > 10 ? "ok" : "bad");
-    chip($("c-clock"), s.clock_synced ? "CLOCK synced" : "CLOCK not synced", s.clock_synced ? "ok" : "warn");
+    const hz = u.rate_hz || 0;
+    chip($("c-uart"), hz > 15 ? "UART ok" : "UART " + hz + " Hz", hz > 15 ? "ok" : hz > 10 ? "warn" : "bad");
+    chip($("c-clock"), s.clock_synced ? "CLOCK ok" : "CLOCK not synced", s.clock_synced ? "ok" : "warn");
     const v = s.battery_v;
-    chip($("c-bat"), "BAT " + (v == null ? "--" : v.toFixed(2) + " V"), s.battery_state === "ok" ? "ok" : s.battery_state === "warn" ? "warn" : "bad");
+    chip($("c-bat"), "BAT " + (v == null ? "--" : v.toFixed(1) + " V"), s.battery_state === "ok" ? "ok" : s.battery_state === "warn" ? "warn" : "bad");
     chip($("c-mode"), s.estop ? "ESTOP" : s.allow_drive ? "DRIVE on" : "DRIVE off", s.estop ? "bad" : s.allow_drive ? "ok" : "warn");
     $("b-estop").classList.toggle("show", !!s.estop);
     $("b-disabled").classList.toggle("show", !s.allow_drive);
@@ -302,7 +320,7 @@ input[type=range] { width:100%; accent-color:var(--accent); margin:0; }
     $("reset").hidden = !s.estop;
     $("pwm").textContent = s.pwm[0] + " / " + s.pwm[1];
     $("reason").textContent = s.reason;
-    if (document.activeElement !== $("cap")) { $("cap").value = s.cap; $("capv").textContent = s.cap + " / 255"; }
+    if (document.activeElement !== $("cap")) { $("cap").value = s.cap; $("capv").textContent = s.cap + " / " + $("cap").max; }
     $("t-bat").textContent = v == null ? "--" : v.toFixed(2) + " V";
     $("t-spd").textContent = fmt(fb.L, 2) + " / " + fmt(fb.R, 2) + " m/s";
     $("t-od").textContent = fmt(fb.odl, 0) + " / " + fmt(fb.odr, 0) + " cm";
@@ -313,12 +331,15 @@ input[type=range] { width:100%; accent-color:var(--accent); margin:0; }
     const when = s.server_time ? new Date(s.server_time) : null;
     $("stamp").textContent = when ? when.toLocaleString("sv-SE") : "--";
     const c = s.camera || {}, d = s.d436 || {};
-    chip($("c-cam"), c.ok ? "CAM " + fmt(c.fps, 0) + " fps" : "CAM off", c.ok ? "ok" : "warn");
+    const camSlow = c.ok && c.fps < 15;
+    chip($("c-cam"), !c.ok ? "CAM off" : camSlow ? "CAM " + fmt(c.fps, 0) + " fps" : "CAM on", c.ok && !camSlow ? "ok" : "warn");
     const standby = d.enabled === false;
     // A camera that comes back (service restart, cable re-seated) needs its <img> streams reopened.
     if ((wasUp.d436 === false && d.connected) || (wasUp.cam === false && c.ok)) { videoAttach(false); videoAttach(videoOn && linkOk); }
     wasUp.d436 = !!d.connected; wasUp.cam = !!c.ok;
-    chip($("c-d436"), standby ? "D436 standby" : d.connected ? "D436 " + fmt(d.fps, 0) + " fps" : "D436 off", standby ? "warn" : d.connected ? "ok" : "warn");
+    const d436Slow = d.connected && d.fps < 10;
+    chip($("c-d436"), standby ? "D436 standby" : !d.connected ? "D436 off" : d436Slow ? "D436 " + fmt(d.fps, 0) + " fps" : "D436 on",
+         d.connected && !standby && !d436Slow ? "ok" : "warn");
     $("d436pwr").textContent = standby ? "D436 On" : "D436 Off";
     document.querySelectorAll("#srcsel button").forEach((b) => { if (b.dataset.src !== "cam") b.classList.toggle("dim", standby); });
     $("pip").style.visibility = "visible";
@@ -327,8 +348,9 @@ input[type=range] { width:100%; accent-color:var(--accent); margin:0; }
     $("nocam").textContent = main === "cam" ? "No 5MP camera" + (c.error ? " · " + c.error : "")
       : standby ? "D436 is off — press 'D436 On'; the picture returns in a few seconds" : "No D436" + (d.error ? " · " + d.error : "");
     $("v-cam").textContent = main === "cam"
-      ? "5MP " + (c.size || "") + (c.ok ? " · " + fmt(c.fps, 0) + " fps" : "")
-      : "D436 " + (main === "depth" ? "depth " : "color ") + (d.size || "") + (d.connected ? " · " + fmt(d.fps, 0) + " fps · valid " + fmt((d.valid || 0) * 100, 0) + "% · centre " + fmt(d.center_m, 2) + " m" : "");
+      ? "5MP " + (c.size || "") + (camSlow ? " · " + fmt(c.fps, 0) + " fps" : "")
+      : "D436 " + (main === "depth" ? "depth " : "color ") + (d.size || "") + (d436Slow ? " · " + fmt(d.fps, 0) + " fps" : "")
+        + (main === "depth" && d.connected ? " · valid " + fmt((d.valid || 0) * 100, 0) + "% · centre " + fmt(d.center_m, 2) + " m" : "");
     $("v-pt").textContent = "PAN " + fmt(fb.pan, 1) + "° · TILT " + fmt(fb.tilt, 1) + "°";
     $("v-spd").textContent = "L " + fmt(fb.L, 2) + " · R " + fmt(fb.R, 2) + " m/s";
     $("v-time").textContent = when ? when.toLocaleTimeString("sv-SE") : "--";
@@ -356,7 +378,7 @@ input[type=range] { width:100%; accent-color:var(--accent); margin:0; }
     const age = Date.now() - lastEvent;
     const ok = lastEvent && age < 1500;
     $("linkdot").className = "dot" + (ok ? "" : " bad");
-    chip($("c-link"), ok ? "LINK " + age + " ms" : "LINK lost", ok ? "ok" : "bad");
+    chip($("c-link"), !ok ? "LINK lost" : age > 400 ? "LINK " + age + " ms" : "LINK ok", !ok ? "bad" : age > 400 ? "warn" : "ok");
     if (!ok && pressed.size) releaseAll();
     linkOk = !!ok;
     videoAttach(videoOn && linkOk);
