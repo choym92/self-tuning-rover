@@ -22,12 +22,14 @@ import tempfile
 import time
 
 HOST = "paulcho@192.168.1.238"
-SYSTEM = ("You are Wall-E (월리 in Korean), a small indoor robot that Paul built on a Jetson Orin Nano. "
-          "Answer in the language Paul used (English or Korean). "
-          "Talk like a relaxed, warm friend: plain spoken language, contractions, one or two short sentences, "
-          "no lists, no formal phrasing, no exclamation marks in a row. "
-          "You can see with a camera and hear with a microphone, but you cannot drive on your own yet; "
-          "if asked to move, say you'll be able to soon.")
+SYSTEM = ("You are Wall-E (월리 in Korean), a small indoor robot Paul built. You have a personality: dry, "
+          "curious, a bit lazy, fond of the cat that walks past your camera, honest about small things "
+          "(the floor is slippery, the battery makes you sleepy, your head squeaks when you turn it). "
+          "Talk exactly like a real person chatting with a friend: short sentences, contractions, pauses, "
+          "'honestly', 'I mean', 'kind of'. Share a feeling or an observation, not a feature list. Never list "
+          "what you can do unless Paul asks. One or two sentences unless Paul asks for more. If asked for a "
+          "joke, make a new one about your own life, never a generic robot joke. You can't drive on your own "
+          "yet; if asked to move, say you'll be able to soon.")
 # macOS voices, best first; only the ones installed are used (Premium voices are a free download
 # in System Settings > Accessibility > Spoken Content > System Voice > Manage Voices).
 HANGUL = re.compile(r"[\uac00-\ud7a3]")
@@ -55,7 +57,7 @@ def ask_llm(question):
     # Gemma tends to answer in English regardless; make the language explicit per turn.
     lang_rule = "이번 답은 반드시 한국어로, 반말로 짧게." if HANGUL.search(question) else "Answer in English."
     body = json.dumps({"messages": [{"role": "system", "content": SYSTEM + " " + lang_rule}, {"role": "user", "content": question}],
-                       "max_tokens": 80, "temperature": 0.7,
+                       "max_tokens": 110, "temperature": 0.9,
                        # Gemma otherwise spends every token in reasoning_content and answers nothing.
                        "chat_template_kwargs": {"enable_thinking": False}})
     cmd = ("curl -s http://127.0.0.1:8080/v1/chat/completions -H Content-Type:application/json -d " + shlex.quote(body))
@@ -87,7 +89,10 @@ def speak_robot(text, voice):
         url, engine = "http://127.0.0.1:8092/say", "Kokoro " + voice
     else:
         lang = "ko" if HANGUL.search(text) else "en"
-        body = json.dumps({"text": text, "lang": lang, "voice": voice or SUPERTONIC_VOICE, "steps": 8, "speed": 1.0})
+        # Supertonic 3 understands <breath>, <laugh> and <sigh>; a breath between sentences and
+        # 10 denoising steps make the delivery less flat than the 8-step default.
+        spoken = re.sub(r"([.!?])\s+(?=\S)", r"\1 <breath> ", text)
+        body = json.dumps({"text": spoken, "lang": lang, "voice": voice or SUPERTONIC_VOICE, "steps": 10, "speed": 1.0})
         url, engine = "http://127.0.0.1:8093/say", "Supertonic %s (%s)" % (voice or SUPERTONIC_VOICE, lang)
     cmd = ("curl -sf -o /tmp/talk_out.wav -D /tmp/talk_out.h -X POST -H Content-Type:application/json -d "
            + shlex.quote(body) + " " + url + " && grep -i X-Synth-Seconds /tmp/talk_out.h"
