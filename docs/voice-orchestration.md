@@ -44,11 +44,11 @@ run as separate processes or containers. Combining images does not remove the
 memory consumed by loaded models. On the 8 GB Jetson, serialize heavy GPU work
 and give navigation/perception priority over chat.
 
-## What happens after `Hey Jetson`
+## What happens after `Hey Wall-E`
 
 1. The microphone runs continuously. Only a short, bounded pre-roll remains in
    a RAM ring buffer; raw audio is not stored by default.
-2. A lightweight CPU wake-word detector recognizes `Hey Jetson`.
+2. A lightweight CPU wake-word detector recognizes `Hey Wall-E` (Paul's choice, 2026-11-07; `docs/decisions.md`).
 3. The robot acknowledges that it is listening with a short sound or LED.
 4. The orchestrator creates an utterance ID and timestamp.
 5. VAD captures speech, including pre-roll so the first command word is not
@@ -148,7 +148,7 @@ the final microphone and speaker later.
 3. Test routing, rejection, expiry, duplication and cancellation against a fake
    robot API; no motors move.
 4. Replace fixed eight-second capture with VAD and end-of-speech detection.
-5. Add the `Hey Jetson` detector and pre-roll buffer.
+5. Add the `Hey Wall-E` detector and pre-roll buffer.
 6. Repeat acoustic tests with the final rover microphone, fan, motors, speaker
    and realistic distances. Mac noise tests are not hardware acceptance tests.
 7. Connect read-only tools such as weather and robot status.
@@ -162,8 +162,8 @@ the final microphone and speaker later.
 
 Discuss and decide these one at a time before implementation:
 
-1. Interaction: `Hey Jetson` -> acknowledgement -> command, or allow one-breath
-   `Hey Jetson, go to the kitchen` from the first version? The recommendation
+1. Interaction: `Hey Wall-E` -> acknowledgement -> command, or allow one-breath
+   `Hey Wall-E, go to the kitchen` from the first version? The recommendation
    for version 1 is the explicit acknowledgement flow.
 2. Acknowledgement: sound, LED, spoken phrase, or a combination?
 3. Which commands require confirmation before execution?

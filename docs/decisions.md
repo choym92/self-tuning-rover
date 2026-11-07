@@ -307,3 +307,4 @@ Compared on the Jetson with clocks locked (`docs/verify.md`): YOLO26n 3.6 ms / ~
 ## The robot's name is Wall-E (2026-11-06, DECIDED by Paul)
 
 - Spoken as Wall-E in English and 월리 in Korean; used in the LLM system prompt and the console header. An earlier working name the same evening (T-100) was dropped.
+- Wake phrase: **Hey Wall-E** (헤이 월리), Paul's choice 2026-11-07; replaces the `Hey Jetson` working phrase.
