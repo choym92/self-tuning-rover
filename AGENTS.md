@@ -73,6 +73,13 @@ while the NVMe system is running; their filesystem UUIDs are identical.
 6. Never edit a running script. Reddit is blocked; do not try workarounds.
 7. Files in the separate CS7638 course repository are off limits.
 
+## Product goal
+
+Kalman's mind is meant to become a separable product that others run on their own machine and
+connect to their own Jetson robot (`docs/decisions.md`, 2026-11-07). Keep mind code modular with
+explicit interfaces, no rover-specific assumptions in the core (hardware and services as adapters),
+prompts and settings as editable files, and docs written for an outside user.
+
 ## Decision review
 
 For a hard-to-reverse architecture, device, safety, security, privacy or

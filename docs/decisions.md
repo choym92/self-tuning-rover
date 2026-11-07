@@ -32,6 +32,7 @@ Contents (search these headings first; open only the section you need):
 - [The robot's name is Kalman (2026-11-07, DECIDED by Paul)](#the-robots-name-is-kalman-2026-11-07-decided-by-paul)
 - [The rover's LLM runs on the home Mac mini, reached by a rover-side tunnel (2026-11-07, DECIDED by Paul)](#the-rovers-llm-runs-on-the-home-mac-mini-reached-by-a-rover-side-tunnel-2026-11-07-decided-by-paul)
 - [Kalman's mind: staged plan, speed layers and storage (2026-11-07, DECIDED by Paul)](#kalmans-mind-staged-plan-speed-layers-and-storage-2026-11-07-decided-by-paul)
+- [Goal: Kalman's mind becomes a product others can run (2026-11-07, DECIDED by Paul)](#goal-kalmans-mind-becomes-a-product-others-can-run-2026-11-07-decided-by-paul)
 
 ## AI use: unrestricted — personal project (2026-09-23)
 
@@ -326,3 +327,9 @@ Compared on the Jetson with clocks locked (`docs/verify.md`): YOLO26n 3.6 ms / ~
 - Stages, each with a test Paul can see: 0 floor (journal, drive time limit, manual/auto arbitration, auto-start, charging point); 1 **listens when called** (`Hey Kalman`, on the rover, no MacBook); 2 **remembers** (conversation memory with Paul approving candidate facts, OpenHebb-style); 3 **looks** (faces and motion turn the head, idle looking around; needs the LLM off the Jetson, done 2026-11-07); 4 **moves on its own** (needs the body track); 5 **improves overnight** (the Mac mini replays the day's logs and conversations). Sound direction needs a microphone array and is not in stage 3.
 - Three speeds: reflex (rover-control, under 100 ms, no LLM), behaviour (`rover-mind` on the Jetson, about 1 s), thought (LLM on the Mac mini, seconds). `rover-mind` uses only rover-control's HTTP API; the LLM proposes typed actions only (`docs/voice-orchestration.md`); a human at the console always wins.
 - Storage: from stage 1 a day-file JSONL journal of events (wake, heard, reply, spoken, errors, timings) outside the repository; from stage 2 one SQLite file on the Mac mini for memory facts and the approval inbox, no database server. The view is a "Mind" tab in the existing console, not a separate site. Audio is not kept; only text after the wake phrase. Retention is still Paul's to set.
+
+## Goal: Kalman's mind becomes a product others can run (2026-11-07, DECIDED by Paul)
+
+- The grand scheme: the mind (a small local LLM made to behave like a mind through orchestration: context providers, a layered prompt, sessions, memory with recall, tools behind a validator) is built so it can be pulled out of this repository, shared, and run by someone else on their own machine (a Mac mini or similar) and connected to their own Jetson robot. The rover is the first host, not the boundary.
+- Consequences for every change: the core has no rover-specific assumptions (rover-control, microphones, speakers, cameras are adapters behind small interfaces); prompts and settings stay editable files; the folder layout and docs are kept as for an outside user; anything that would block packaging is flagged. A concrete package layout is still to be proposed and reviewed (proposer + adversarial reviewer, AGENTS.md) before code moves.
+- Memory design follows the same rule (Paul, same day): conversations are never deleted; each conversation is a session; the prompt carries only the current session; earlier sessions come back through search (session summaries and approved facts first, raw transcript only as labelled support).
