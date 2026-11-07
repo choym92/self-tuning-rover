@@ -10,7 +10,13 @@ transcribes it with the name as a prompt, and a phrase that starts with "Kalman"
 hey / hi / ok) wakes it. "Hey Kalman, what time is it?" is answered at once; "Hey Kalman" alone gets a
 beep and then the question. After each reply Kalman keeps listening for 8 s (`--follow-s`)
 without the name, as Google Assistant's continued conversation does; "thanks", "stop", "bye", "that's all"
-or 8 s of quiet end the conversation with a low tone. Phrases without the name are dropped without being stored; `/state` only
+or 8 s of quiet end the conversation with a low tone.
+
+Barge-in (first version, no echo canceller): while Kalman speaks the microphone keeps listening; each
+phrase is transcribed and, if it starts with "Kalman", "stop", "wait"... and is not mostly the words
+Kalman is saying (his own voice coming back), playback stops and the rest of the reply is dropped.
+"Kalman, <question>" is answered next; "stop" just stops. A proper echo canceller needs the microphone
+and speaker on one clock (the audio board's own microphones or a mic array with AEC). Phrases without the name are dropped without being stored; `/state` only
 counts them (`phrases`, `whisper_ms`, `wakes`). Known cost: names that sound alike ("Calvin",
 "Carmen") also wake it, and Whisper runs on every phrase anyone in the room says (`docs/verify.md`).
 

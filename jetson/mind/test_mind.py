@@ -75,6 +75,20 @@ class WakeTests(unittest.TestCase):
         for text, want in cases.items():
             self.assertEqual(mind.split_wake(text), want, text)
 
+    def test_barge_in(self):
+        speaking = "Honestly, my battery is low, so Kalman is feeling sleepy today."
+        cases = {"Kalman, stop.": (True, ""), "Stop!": (True, ""), "Wait, Kalman.": (True, ""),
+                 "Kalman, what time is it?": (True, "what time is it?"),
+                 "my battery is low so Kalman": (False, ""),          # his own voice coming back
+                 "Kalman is feeling sleepy": (False, ""),            # echo that happens to start with the name
+                 "How is the weather?": (False, ""), "": (False, "")}
+        for heard, want in cases.items():
+            self.assertEqual(mind.barge_in(heard, speaking), want, heard)
+
+    def test_echo_share(self):
+        self.assertTrue(mind.is_echo("battery is low", "My battery is low."))
+        self.assertFalse(mind.is_echo("stop talking now", "My battery is low."))
+
     def test_end_phrases(self):
         for text, end in (("Thank you.", True), ("Thanks, Kalman!", True), ("OK stop.", True), ("Go to sleep.", True),
                           ("That's all.", True), ("Never mind", True), ("Bye!", True),

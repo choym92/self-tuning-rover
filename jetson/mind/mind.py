@@ -67,6 +67,32 @@ def is_end(text):
     return bool(END.match(text or "")) and len((text or "").split()) <= 6
 
 
+# Barge-in (stage 1, no echo canceller): while Kalman speaks the microphone keeps listening, every phrase
+# is transcribed, and a phrase that starts like this AND is not just Kalman's own voice coming back stops
+# him. The echo test compares words with what he is saying (the transcript-matching fallback voice
+# platforms use; a real canceller needs the microphone and speaker on one clock, which ours are not).
+INTERRUPT = re.compile(r"^\W*(?:(?:hey|ok|okay)\W+)?(?:kalman|stop|wait|hold on|enough|be quiet|quiet|shut up)\b", re.I)
+
+
+def words(text):
+    return re.findall(r"[a-z\uac00-\ud7a3']+", (text or "").lower())
+
+
+def is_echo(heard, spoken, share=0.6):
+    """True when most of the heard words are words Kalman is saying right now."""
+    h, s = words(heard), set(words(spoken))
+    return not h or sum(w in s for w in h) / len(h) >= share
+
+
+def barge_in(heard, spoken):
+    """(True, rest) when `heard` is Paul interrupting; rest is what followed the name, if anything."""
+    if not INTERRUPT.match(heard or "") or is_echo(heard, spoken):
+        return False, ""
+    woke, rest = split_wake(heard)
+    keep = woke and is_speech(rest) and not INTERRUPT.match(rest) and not is_end(rest)   # "Kalman, stop." only stops
+    return True, (rest if keep else "")
+
+
 def is_speech(text):
     """False for empty text, sound tags only ([BEEP], (noise)) and lines Whisper invents from noise."""
     words = re.sub(r"\[[^\]]*\]|\([^)]*\)", "", text).strip(" .,!?")
@@ -244,7 +270,8 @@ class Mind:
         self.wake = threading.Event()
         self.vad = make_vad(args.vad_model)
         self.gate_vad = make_vad(args.vad_model, silence_s=0.4)
-        self.counts = {"phrases": 0, "whisper_ms": 0, "wakes": 0, "follow_ups": 0}   # for the TV test
+        self.barge_vad = make_vad(args.vad_model, silence_s=0.3)
+        self.counts = {"phrases": 0, "whisper_ms": 0, "wakes": 0, "follow_ups": 0, "interrupts": 0, "echoes": 0}
         self.convo_until = 0.0         # while now < this, a phrase needs no name (conversation mode)
         self.state = "starting"
         self.speaking = False
@@ -296,8 +323,40 @@ class Mind:
             time.sleep(0.5)
         return False
 
+    def play_listening(self, wav, frames, gate, spoken):
+        """Play `wav` while still listening. Returns the interrupting phrase if Paul cut in, else None."""
+        for _ in range(20):
+            p = subprocess.Popen(["aplay", "-q", "-D", self.a.speaker, "-"], stdin=subprocess.PIPE, stderr=subprocess.PIPE)
+
+            def feed():
+                try:
+                    p.stdin.write(wav)
+                    p.stdin.close()
+                except (BrokenPipeError, ValueError):
+                    pass
+            threading.Thread(target=feed, daemon=True).start()
+            while p.poll() is None:
+                phrase = gate.feed(next(frames))
+                if not phrase:
+                    continue
+                try:
+                    heard = self.transcribe(phrase)
+                except Exception:
+                    continue
+                cut, _ = barge_in(heard, spoken)
+                if cut:
+                    p.kill()
+                    p.wait()
+                    return heard
+                if INTERRUPT.match(heard or ""):
+                    self.counts["echoes"] += 1
+            if p.returncode == 0 or b"busy" not in (p.stderr.read() or b""):
+                return None
+            time.sleep(0.5)
+        return None
+
     # --- one turn -------------------------------------------------------------------------
-    def turn(self, source, frames, called="", question=""):
+    def turn(self, source, frames, called="", question="", depth=0):
         """One exchange. With `question` (said in the same breath as the name) Kalman answers at once;
         otherwise it beeps and records the question."""
         self.journal.write("wake", source=source, heard=called)
@@ -341,18 +400,21 @@ class Mind:
                 self.journal.write("error", where="llm", error=str(e))
                 self.play(path=os.path.join(self.a.voice_dir, f"brain_offline_{lang}.wav"))
                 return
-            said, first = [], None
+            said, first, cut = [], None, None
             # Synthesis runs one sentence ahead of playback, so sentences follow without a gap.
-            ready = queue.Queue(maxsize=2)
+            ready, stop = queue.Queue(maxsize=2), threading.Event()
 
             def produce():
                 try:
                     for sentence in sentences(stream):
+                        if stop.is_set():
+                            break
                         ready.put((sentence, self.synthesize(sentence)))
                 except Exception as e:
                     ready.put((None, e))
                 ready.put(None)
 
+            bgate = SpeechGate(self.barge_vad, min_s=0.3)
             with resp:
                 threading.Thread(target=produce, daemon=True).start()
                 while True:
@@ -365,13 +427,24 @@ class Mind:
                         break
                     if first is None:
                         first = round((time.monotonic() - t2) * 1000)
-                    self.play(wav)
+                    cut = self.play_listening(wav, frames, bgate, " ".join(said + [sentence]))
                     said.append(sentence)
-            reply = " ".join(said)
+                    if cut:
+                        stop.set()
+                        break
+            reply = " ".join(said) + (" [interrupted]" if cut else "")
             self.journal.write("reply", text=reply, model=self.a.model_name, first_sound_ms=first,
                                ms=round((time.monotonic() - t2) * 1000))
             self.history.extend([{"role": "user", "content": heard}, {"role": "assistant", "content": reply}])
             self.convo_until = time.monotonic() + 0.3 + self.a.follow_s
+            if cut:
+                self.counts["interrupts"] += 1
+                self.journal.write("interrupted", by=cut)
+                _, rest = barge_in(cut, "")
+                woke, _ = split_wake(cut)
+                if depth < 3 and (rest or woke):         # "Kalman, ..." gets an answer; "stop" just stops
+                    self.speaking = False
+                    self.turn("interrupt", frames, called=cut, question=rest, depth=depth + 1)
         finally:
             time.sleep(0.3)
             self.speaking = False
