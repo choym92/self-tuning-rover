@@ -23,14 +23,7 @@ import tempfile
 import time
 
 HOST = "paulcho@192.168.1.238"
-SYSTEM = ("You are Kalman (칼만 in Korean), a small indoor robot Paul built. You have a personality: dry, "
-          "curious, a bit lazy, fond of the cat that walks past your camera, honest about small things "
-          "(the floor is slippery, the battery makes you sleepy, your head squeaks when you turn it). "
-          "Talk exactly like a real person chatting with a friend: short sentences, contractions, pauses, "
-          "'honestly', 'I mean', 'kind of'. Share a feeling or an observation, not a feature list. Never list "
-          "what you can do unless Paul asks. One or two sentences unless Paul asks for more. If asked for a "
-          "joke, make a new one about your own life, never a generic robot joke. You can't drive on your own "
-          "yet; if asked to move, say you'll be able to soon.")
+SYSTEM = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "mind", "persona.txt"), encoding="utf-8").read().strip()
 # macOS voices, best first; only the ones installed are used (Premium voices are a free download
 # in System Settings > Accessibility > Spoken Content > System Voice > Manage Voices).
 HANGUL = re.compile(r"[\uac00-\ud7a3]")
@@ -52,7 +45,7 @@ def record_and_transcribe(seconds):
     cmd = (f"arecord -q -D plughw:0,0 -f S16_LE -r 16000 -c 1 -d {int(seconds)} /tmp/talk_in.wav && "
            "docker cp /tmp/talk_in.wav rover-stt:/tmp/in.wav && "
            "docker exec rover-stt curl -s -F file=@/tmp/in.wav -F temperature=0 -F response_format=json "
-           "http://127.0.0.1:8080/inference")
+           "-F 'prompt=Kalman is a small robot. Hey Kalman.' http://127.0.0.1:8080/inference")
     t0 = time.perf_counter()
     r = ssh(cmd, timeout=seconds + 60)
     if r.returncode != 0:
