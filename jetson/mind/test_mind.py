@@ -87,6 +87,14 @@ class TextTests(unittest.TestCase):
         self.assertIn(b"RIFFdata", body)
         self.assertTrue(body.endswith(("--" + boundary + "--\r\n").encode()))
 
+    def test_noise_and_invented_lines_are_not_speech(self):
+        for text, speech in (("[BEEP]", False), (" [BLANK_AUDIO]", False), ("(cough) [Music]", False),
+                             ("Thank you for watching that well.", False), ("Thanks for watching!", False),
+                             ("Thank you.", False), (" you", False), ("Please subscribe to my channel", False),
+                             ("Hey Kalman, stop.", True), ("Thank you, Kalman, that was funny.", True),
+                             ("Did it work?", True), ("How's your battery?", True)):
+            self.assertEqual(mind.is_speech(text), speech, text)
+
     def test_tone_is_a_wav(self):
         self.assertEqual(mind.tone()[:4], b"RIFF")
 
