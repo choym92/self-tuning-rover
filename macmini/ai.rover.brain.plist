@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- The rover's LLM on the home Mac mini (docs/preflight.md, 2026-11-07). User LaunchAgent: runs in
+     paul's logged-in session, restarts on exit, loopback only. Install:
+       cp ai.rover.brain.plist ~/Library/LaunchAgents/ && launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/ai.rover.brain.plist
+     Remove: launchctl bootout gui/$(id -u)/ai.rover.brain && rm ~/Library/LaunchAgents/ai.rover.brain.plist -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>ai.rover.brain</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/paul/rover-brain/engine/llama-b11146/llama-server</string>
+    <string>-m</string><string>/Users/paul/rover-brain/models/gemma-4-E2B-it-Q4_K_M.gguf</string>
+    <string>-ngl</string><string>99</string>
+    <string>-np</string><string>1</string>
+    <string>-c</string><string>4096</string>
+    <string>--load-mode</string><string>none</string>
+    <string>-b</string><string>512</string>
+    <string>-ub</string><string>512</string>
+    <string>-fa</string><string>on</string>
+    <string>--ctx-checkpoints</string><string>0</string>
+    <string>--cache-ram</string><string>0</string>
+    <string>--no-webui</string>
+    <string>--host</string><string>127.0.0.1</string>
+    <string>--port</string><string>8080</string>
+  </array>
+  <key>WorkingDirectory</key><string>/Users/paul/rover-brain</string>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <key>ProcessType</key><string>Interactive</string>
+  <key>StandardOutPath</key><string>/Users/paul/rover-brain/llama.log</string>
+  <key>StandardErrorPath</key><string>/Users/paul/rover-brain/llama.log</string>
+</dict>
+</plist>
