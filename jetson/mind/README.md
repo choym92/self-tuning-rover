@@ -8,7 +8,9 @@ Supertonic (`rover-tts-st`) on the rover speaker, and journal every step.
 Wake (Paul's choice 2026-11-07): Silero VAD cuts each spoken phrase out of the stream, Whisper
 transcribes it with the name as a prompt, and a phrase that starts with "Kalman" (optionally after
 hey / hi / ok) wakes it. "Hey Kalman, what time is it?" is answered at once; "Hey Kalman" alone gets a
-beep and then the question. Phrases without the name are dropped without being stored; `/state` only
+beep and then the question. After each reply Kalman keeps listening for 8 s (`--follow-s`)
+without the name, as Google Assistant's continued conversation does; "thanks", "stop", "bye", "that's all"
+or 8 s of quiet end the conversation with a low tone. Phrases without the name are dropped without being stored; `/state` only
 counts them (`phrases`, `whisper_ms`, `wakes`). Known cost: names that sound alike ("Calvin",
 "Carmen") also wake it, and Whisper runs on every phrase anyone in the room says (`docs/verify.md`).
 

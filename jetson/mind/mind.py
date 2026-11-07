@@ -50,6 +50,15 @@ def split_wake(text):
     return (True, text[m.end():].strip()) if m else (False, "")
 
 
+# Ends a conversation early, as on Google Assistant and Alexa ("thank you", "stop", "go to sleep").
+END = re.compile(r"^\W*(?:(?:ok|okay|alright|all right)\W+)?(?:thank you|thanks|stop|cancel|bye|goodbye|good bye|"
+                 r"go to sleep|that'?s all|that is all|never mind|nevermind)\b[\w\s,'.!]*$", re.I)
+
+
+def is_end(text):
+    return bool(END.match(text or "")) and len((text or "").split()) <= 6
+
+
 def is_speech(text):
     """False for empty text, sound tags only ([BEEP], (noise)) and lines Whisper invents from noise."""
     words = re.sub(r"\[[^\]]*\]|\([^)]*\)", "", text).strip(" .,!?")
@@ -221,7 +230,8 @@ class Mind:
         self.wake = threading.Event()
         self.vad = make_vad(args.vad_model)
         self.gate_vad = make_vad(args.vad_model, silence_s=0.4)
-        self.counts = {"phrases": 0, "whisper_ms": 0, "wakes": 0}   # for the TV test: how often Whisper ran
+        self.counts = {"phrases": 0, "whisper_ms": 0, "wakes": 0, "follow_ups": 0}   # for the TV test
+        self.convo_until = 0.0         # while now < this, a phrase needs no name (conversation mode)
         self.state = "starting"
         self.speaking = False
         self.recent = deque(maxlen=int(1.0 * RATE / FRAME))     # pre-roll and noise level
@@ -318,6 +328,7 @@ class Mind:
             self.journal.write("reply", text=reply, model=self.a.model_name, first_sound_ms=first,
                                ms=round((time.monotonic() - t2) * 1000))
             self.history.extend([{"role": "user", "content": heard}, {"role": "assistant", "content": reply}])
+            self.convo_until = time.monotonic() + 0.3 + self.a.follow_s
         finally:
             time.sleep(0.3)
             self.speaking = False
@@ -333,6 +344,13 @@ class Mind:
                 raise RuntimeError("microphone stream ended")
             yield chunk
 
+    def end_conversation(self, reason):
+        self.convo_until = 0.0
+        self.journal.write("conversation_end", reason=reason)
+        self.speaking = True
+        self.play(tone(freq=440.0, seconds=0.25, volume=0.2))
+        self.speaking = False
+
     def run(self):
         self.journal.write("start", mic=self.a.mic, speaker=self.a.speaker, llm=self.a.llm, model=self.a.model_name)
         src = self.frames()
@@ -343,6 +361,9 @@ class Mind:
                 continue                       # half-duplex: ignore our own voice
             self.recent.append(frame)
             woke, called, question, source = False, "", "", "button"
+            in_convo = time.monotonic() < self.convo_until
+            if self.convo_until and not in_convo and gate.frames is None:
+                self.end_conversation("quiet")
             phrase = gate.feed(frame)
             if phrase:
                 t = time.monotonic()
@@ -357,6 +378,11 @@ class Mind:
                 if woke:
                     source = "name"
                     question = question if is_speech(question) else ""
+                elif in_convo and is_end(called):
+                    self.end_conversation("said: " + called.strip())
+                elif in_convo and is_speech(called):
+                    woke, source, question = True, "follow-up", called.strip()
+                    self.counts["follow_ups"] += 1
             if woke or self.wake.is_set():
                 self.wake.clear()
                 self.counts["wakes"] += 1
@@ -411,6 +437,7 @@ def main():
     ap.add_argument("--persona", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "persona.txt"))
     ap.add_argument("--journal", default="/journal")
     ap.add_argument("--voice-dir", default="/voice")
+    ap.add_argument("--follow-s", type=float, default=8.0, help="after a reply, seconds in which no name is needed")
     ap.add_argument("--port", type=int, default=8096)
     ap.add_argument("--vad-model", default="/models/sherpa/silero_vad.onnx")
     args = ap.parse_args()

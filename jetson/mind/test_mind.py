@@ -74,6 +74,13 @@ class WakeTests(unittest.TestCase):
         for text, want in cases.items():
             self.assertEqual(mind.split_wake(text), want, text)
 
+    def test_end_phrases(self):
+        for text, end in (("Thank you.", True), ("Thanks, Kalman!", True), ("OK stop.", True), ("Go to sleep.", True),
+                          ("That's all.", True), ("Never mind", True), ("Bye!", True),
+                          ("Stop the music and tell me a long story about your day please", False),
+                          ("How's your battery?", False), ("Can you stop worrying?", False), ("", False)):
+            self.assertEqual(mind.is_end(text), end, text)
+
     def test_gate_cuts_a_phrase_with_pre_roll(self):
         gate = mind.SpeechGate(FakeVad(quiet_needed=5), pre_s=0.09, min_s=0.2)
         quiet, loud = frame(300), frame(6000)
