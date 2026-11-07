@@ -503,3 +503,12 @@ samples, 73 MiB; 5 MP big + D436 colour small at 5 fps 23%. Camera standby (`POS
 the first frame and the stream was back at 30 fps 3 s later. The eyes container restarts in 3 s. The tilt bracket shows
 as the black lower-right region in both D436 views. The page's three-source selector and the small
 picture were checked in the built-in browser; 17 unit tests pass on the Mac (15 control, 2 eyes).
+
+## Pan-tilt settle correction (2026-11-07, Jetson on the rover)
+
+Before: "Center" (T:133 to 0/0) left the ST3215 head at +1.0 or -1.1 deg pan depending on the
+approach direction (gear play), 0.2-0.3 deg tilt. With the server's settle step (read the reported
+angle 0.6 s after the command, nudge by the error if it exceeds 0.3 deg, at most three nudges):
+Center from +15 deg landed at +0.2/+0.1, from -15 deg at -0.1/+0.1; 15/10 deg landed at 14.8/9.8,
+-15 deg at -15.0. A calibration trim (`--pan-trim`, `--tilt-trim`) is in place but still 0; the true
+forward direction has not been measured yet (needs the D436 and a target).
