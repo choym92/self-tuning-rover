@@ -344,3 +344,4 @@ Cells in, Jetson booted on rover power (fan on; R36.5.2 kernel, MAXN_SUPER, abou
   Afternoon: Paul reports the cable problem fixed (what was done is not recorded yet). Standing
   rule from Paul: the D436 cable and the charger plug collide at the jack, so the D436 is
   unplugged while charging; the eyes service reconnects on its own when it is plugged back in.
+- Robot renamed Kalman (칼만), wake phrase Hey Kalman: `docs/decisions.md`. Entries above keep the name used at the time.

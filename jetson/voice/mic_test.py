@@ -23,12 +23,12 @@ HOST = "paulcho@192.168.1.238"
 DEVICE = "plughw:0,0"
 SECONDS = 5
 PHRASES = {
-    "en": ["Hey Wall-E", "Hey Wall-E, what time is it?", "Hey Wall-E, stop.", "Hey Wall-E, look to the left.",
-           "Hey Wall-E, how is your battery?", "Hey Wall-E, do you see the cat?"],
-    "ko": ["헤이 월리", "헤이 월리, 지금 몇 시야?", "헤이 월리, 멈춰.", "헤이 월리, 왼쪽 봐.",
-           "헤이 월리, 배터리 어때?", "헤이 월리, 고양이 보여?"],
+    "en": ["Hey Kalman", "Hey Kalman, what time is it?", "Hey Kalman, stop.", "Hey Kalman, look to the left.",
+           "Hey Kalman, how is your battery?", "Hey Kalman, do you see the cat?"],
+    "ko": ["헤이 칼만", "헤이 칼만, 지금 몇 시야?", "헤이 칼만, 멈춰.", "헤이 칼만, 왼쪽 봐.",
+           "헤이 칼만, 배터리 어때?", "헤이 칼만, 고양이 보여?"],
 }
-WAKE = re.compile(r"wall|wally|월리|윌리|왈리|월이|얼리", re.I)
+WAKE = re.compile(r"kalman|calman|colman|coleman|칼만|칼먼|갈만", re.I)
 LEVELS = ("import wave,array,math;w=wave.open('/tmp/mic_test.wav');a=array.array('h',w.readframes(w.getnframes()));"
           "print(round(math.sqrt(sum(x*x for x in a)/max(len(a),1))),max(abs(x) for x in a))")
 

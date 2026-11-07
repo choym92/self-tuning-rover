@@ -29,7 +29,7 @@ Contents (search these headings first; open only the section you need):
 - [On-robot voice output: Kokoro-82M fp32 on the CPU (2026-11-06, SUPERSEDED the same evening by Supertonic 3, below)](#on-robot-voice-output-kokoro-82m-fp32-on-the-cpu-2026-11-06-superseded-the-same-evening-by-supertonic-3-below)
 - [Console control server owns the UART (2026-11-06, DECIDED)](#console-control-server-owns-the-uart-2026-11-06-decided)
 - [On-robot voice: Supertonic 3, voice M1, for both English and Korean (2026-11-06, DECIDED by Paul)](#on-robot-voice-supertonic-3-voice-m1-for-both-english-and-korean-2026-11-06-decided-by-paul)
-- [The robot's name is Wall-E (2026-11-06, DECIDED by Paul)](#the-robots-name-is-wall-e-2026-11-06-decided-by-paul)
+- [The robot's name is Kalman (2026-11-07, DECIDED by Paul)](#the-robots-name-is-kalman-2026-11-07-decided-by-paul)
 
 ## AI use: unrestricted — personal project (2026-09-23)
 
@@ -304,7 +304,8 @@ Compared on the Jetson with clocks locked (`docs/verify.md`): YOLO26n 3.6 ms / ~
 - Why over Kokoro: one voice for both languages (Kokoro has no Korean) and 0.8 GB less RAM with only one TTS container. Measured cost: English quality a little below Kokoro (benchmarks 4.32 vs 4.44) and similar speed on this CPU (about 0.7 s of compute per second of speech at 8 steps). Kokoro stays installed (`rover/kokoro:0.6.1`, models in `/home/paulcho/models/kokoro`); `talk.py --voice af_jessica` uses it when its container runs.
 - Risk accepted: Supertone announced its dissolution and archived the repository (2026-09-09); the weights (OpenRAIL-M) and SDK are pinned locally and run offline, so nothing depends on the vendor staying up.
 
-## The robot's name is Wall-E (2026-11-06, DECIDED by Paul)
+## The robot's name is Kalman (2026-11-07, DECIDED by Paul)
 
-- Spoken as Wall-E in English and 월리 in Korean; used in the LLM system prompt and the console header. An earlier working name the same evening (T-100) was dropped.
-- Wake phrase: **Hey Wall-E** (헤이 월리), Paul's choice 2026-11-07; replaces the `Hey Jetson` working phrase.
+- **Kalman** (칼만 in Korean), wake phrase **Hey Kalman** (헤이 칼만). Used in the LLM system prompt and the console header.
+- Why: the first name came from the film, and in the 2026-11-07 microphone test Whisper wrote it differently every time (`Wally`, `Orley`, `Whirly`). Kalman has a clear first consonant, is rare in everyday speech, and is the filter at the centre of this project. Alan and Markov were the other candidates: Alan is common and soft, Markov means a memoryless process. Whether the phrase works as a wake word is still to be measured with the detector.
+- History: the robot was called Wall-E (월리) from 2026-11-06 to 2026-11-07, with `Hey Wall-E` as the wake phrase for part of a day, after the `Hey Jetson` working phrase. Older dated entries keep the old name.
