@@ -17,7 +17,9 @@ import io
 import json
 import math
 import os
+import queue
 import re
+import select
 import subprocess
 import sys
 import threading
@@ -42,10 +44,16 @@ INVENTED = re.compile(r"^\W*(thank(s| you)( so much| very much)?( for (watching|
 NAME = re.compile(r"^\W*(?:(?:hey|hi|hello|ok|okay|yo)\W+)?kalman\b\W*", re.I)
 
 
+# Whisper sometimes repeats its own prompt ("Kalman's a huge robot. Kalman.", 2026-11-07).
+ECHO = re.compile(r"\bkalman(?:'s| is)\s+(?:a\s+)?\w*\s*robot\b", re.I)
+
+
 def split_wake(text):
     """(True, rest) when the phrase starts with the name, optionally after a greeting; rest is what
     followed the name ('' if nothing). The general detector heard Paul's "Kalman" as "common"
     (docs/verify.md); Whisper with the name prompt wrote it right on every real call."""
+    if ECHO.search(text or ""):
+        return False, ""
     m = NAME.match(text or "")
     return (True, text[m.end():].strip()) if m else (False, "")
 
@@ -80,7 +88,7 @@ class Endpointer:
     the VAD closes a speech segment (its own silence timer), at `max_s`, or with nothing if nobody
     spoke within `start_s`. The audio sent on is everything since the wake, so nothing is clipped."""
 
-    def __init__(self, vad, start_s=4.0, max_s=8.0):
+    def __init__(self, vad, start_s=4.0, max_s=10.0):
         self.vad = vad
         self.vad.reset()
         self.start_frames = int(start_s * RATE / FRAME)
@@ -105,7 +113,7 @@ class Endpointer:
         return False, None
 
 
-def make_vad(model, silence_s=0.7):
+def make_vad(model, silence_s=0.6):
     import sherpa_onnx
     cfg = sherpa_onnx.VadModelConfig()
     cfg.silero_vad.model = model
@@ -170,14 +178,20 @@ def multipart(fields, file_bytes, filename="utterance.wav"):
     return b"".join(parts), f"multipart/form-data; boundary={boundary}"
 
 
-def sentences(stream):
-    """Turn a stream of text pieces into whole sentences as soon as each one ends."""
-    buf = ""
+def sentences(stream, first_clause_words=4):
+    """Turn a stream of text pieces into whole sentences as soon as each one ends. The very first
+    piece may end at a comma once it has `first_clause_words` words, so the first sound comes sooner."""
+    buf, first = "", True
     for piece in stream:
         buf += piece
+        if first and "," in buf and len(buf.split(",")[0].split()) >= first_clause_words:
+            head, buf = buf.split(",", 1)
+            first = False
+            yield head.strip() + ","
         parts = SENTENCE_END.split(buf)
         for done in parts[:-1]:
             if done.strip():
+                first = False
                 yield done.strip()
         buf = parts[-1]
     if buf.strip():
@@ -257,7 +271,8 @@ class Mind:
 
     def synthesize(self, text):
         lang = "ko" if HANGUL.search(text) else "en"
-        body = json.dumps({"text": text, "lang": lang, "voice": self.a.voice, "steps": 10, "speed": 1.0}).encode()
+        body = json.dumps({"text": text, "lang": lang, "voice": self.a.voice, "steps": self.a.tts_steps,
+                           "speed": self.a.tts_speed}).encode()
         req = urllib.request.Request(self.a.tts + "/say", data=body, headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=60) as r:
             return r.read()
@@ -281,10 +296,10 @@ class Mind:
         else:
             # The microphone keeps recording while the beep plays, so the frames queued during the beep
             # (plus a margin for the speaker's own latency) are dropped; otherwise the beep reads as speech.
-            t_beep = time.monotonic()
+            # Everything queued so far (the wake phrase's transcription time, then the beep itself) is old.
             self.play(tone())
-            for _ in range(int((time.monotonic() - t_beep + 0.15) * RATE / FRAME)):
-                next(frames)
+            time.sleep(0.15)
+            self.drain()
             t0 = time.monotonic()
             seg = Endpointer(self.vad)
             pcm = None
@@ -317,9 +332,27 @@ class Mind:
                 self.play(path=os.path.join(self.a.voice_dir, f"brain_offline_{lang}.wav"))
                 return
             said, first = [], None
+            # Synthesis runs one sentence ahead of playback, so sentences follow without a gap.
+            ready = queue.Queue(maxsize=2)
+
+            def produce():
+                try:
+                    for sentence in sentences(stream):
+                        ready.put((sentence, self.synthesize(sentence)))
+                except Exception as e:
+                    ready.put((None, e))
+                ready.put(None)
+
             with resp:
-                for sentence in sentences(stream):
-                    wav = self.synthesize(sentence)
+                threading.Thread(target=produce, daemon=True).start()
+                while True:
+                    item = ready.get()
+                    if item is None:
+                        break
+                    sentence, wav = item
+                    if sentence is None:
+                        self.journal.write("error", where="tts", error=str(wav))
+                        break
                     if first is None:
                         first = round((time.monotonic() - t2) * 1000)
                     self.play(wav)
@@ -336,13 +369,23 @@ class Mind:
     # --- audio loop -----------------------------------------------------------------------
     def frames(self):
         p = subprocess.Popen(["arecord", "-q", "-D", self.a.mic, "-f", "S16_LE", "-r", str(RATE), "-c", "1", "-t", "raw"],
-                             stdout=subprocess.PIPE)
-        need = FRAME * 2
+                             stdout=subprocess.PIPE, bufsize=0)
+        self.mic_fd = p.stdout.fileno()
+        need, buf = FRAME * 2, b""
         while True:
-            chunk = p.stdout.read(need)
-            if len(chunk) < need:
-                raise RuntimeError("microphone stream ended")
-            yield chunk
+            while len(buf) < need:
+                chunk = os.read(self.mic_fd, 65536)
+                if not chunk:
+                    raise RuntimeError("microphone stream ended")
+                buf += chunk
+            frame, buf = buf[:need], buf[need:]
+            yield frame
+
+    def drain(self):
+        """Throw away every microphone byte already waiting in the pipe."""
+        while select.select([self.mic_fd], [], [], 0)[0]:
+            if not os.read(self.mic_fd, 65536):
+                return
 
     def end_conversation(self, reason):
         self.convo_until = 0.0
@@ -438,6 +481,8 @@ def main():
     ap.add_argument("--journal", default="/journal")
     ap.add_argument("--voice-dir", default="/voice")
     ap.add_argument("--follow-s", type=float, default=8.0, help="after a reply, seconds in which no name is needed")
+    ap.add_argument("--tts-steps", type=int, default=6, help="Supertonic steps: 10 took 1.3-1.7 s per audio second on the Jetson, 6 about 0.6-0.8")
+    ap.add_argument("--tts-speed", type=float, default=1.1)
     ap.add_argument("--port", type=int, default=8096)
     ap.add_argument("--vad-model", default="/models/sherpa/silero_vad.onnx")
     args = ap.parse_args()

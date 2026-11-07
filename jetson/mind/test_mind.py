@@ -70,7 +70,8 @@ class WakeTests(unittest.TestCase):
         cases = {"Hey Kalman.": (True, ""), " Hey Kalman, what time is it?": (True, "what time is it?"),
                  "Kalman.": (True, ""), "OK Kalman stop": (True, "stop"), "hey, kalman, how's your battery?": (True, "how's your battery?"),
                  "How is the weather?": (False, ""), "I told Kalman yesterday.": (False, ""), "Hey Google.": (False, ""),
-                 "Hey Kalmanson": (False, ""), "": (False, "")}
+                 "Hey Kalmanson": (False, ""), "": (False, ""),
+                 "Kalman's a huge robot. Kalman.": (False, ""), "Kalman is a small robot. Hey Kalman.": (False, "")}
         for text, want in cases.items():
             self.assertEqual(mind.split_wake(text), want, text)
 
@@ -99,6 +100,10 @@ class TextTests(unittest.TestCase):
     def test_sentences_stream_out_as_they_end(self):
         pieces = ["Hmm. I", " don't know", "! Maybe the", " cat? ", "No"]
         self.assertEqual(list(mind.sentences(iter(pieces))), ["Hmm.", "I don't know!", "Maybe the cat?", "No"])
+
+    def test_long_first_sentence_starts_at_its_first_comma(self):
+        pieces = ["The battery is getting low", ", so I feel", " sleepy. Also, the cat."]
+        self.assertEqual(list(mind.sentences(iter(pieces))), ["The battery is getting low,", "so I feel sleepy.", "Also, the cat."])
 
     def test_korean_sentences(self):
         self.assertEqual(list(mind.sentences(iter(["음, 그냥 그래. ", "너는?"]))), ["음, 그냥 그래.", "너는?"])
