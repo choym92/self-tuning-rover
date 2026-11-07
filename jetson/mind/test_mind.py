@@ -12,31 +12,57 @@ def frame(level):
     return array.array("h", [level, -level] * (mind.FRAME // 2)).tobytes()
 
 
-class SegmenterTests(unittest.TestCase):
-    def test_utterance_ends_after_silence(self):
-        seg = mind.Segmenter(noise_rms=400)                  # threshold 800
-        quiet, loud = frame(300), frame(3000)
-        out = [seg.feed(f) for f in [quiet] * 5 + [loud] * 20]
-        self.assertFalse(any(d for d, _ in out))
-        for _ in range(seg.silence_frames - 1):
-            self.assertFalse(seg.feed(quiet)[0])
-        done, pcm = seg.feed(quiet)
+class FakeVad:
+    """Speech while frames are loud; closes a segment after `quiet_needed` quiet frames."""
+    def __init__(self, quiet_needed=5):
+        self.quiet_needed, self.segments = quiet_needed, 0
+        self.reset()
+
+    def reset(self):
+        self.speaking, self.quiet = False, 0
+
+    def accept_waveform(self, samples):
+        loud = max(abs(x) for x in samples) > 0.05
+        if loud:
+            self.speaking, self.quiet = True, 0
+        elif self.speaking:
+            self.quiet += 1
+            if self.quiet >= self.quiet_needed:
+                self.speaking, self.segments = False, self.segments + 1
+
+    def is_speech_detected(self):
+        return self.speaking
+
+    def empty(self):
+        return self.segments == 0
+
+    def pop(self):
+        self.segments -= 1
+
+
+class EndpointerTests(unittest.TestCase):
+    def test_request_ends_when_the_vad_closes_a_segment(self):
+        ep = mind.Endpointer(FakeVad())
+        quiet, loud = frame(300), frame(6000)
+        res = [ep.feed(f) for f in [quiet] * 3 + [loud] * 10 + [quiet] * 4]
+        self.assertFalse(any(d for d, _ in res))
+        done, pcm = ep.feed(quiet)
         self.assertTrue(done)
-        self.assertEqual(len(pcm), (5 + 20 + seg.silence_frames) * mind.FRAME * 2)
+        self.assertEqual(len(pcm), (3 + 10 + 5) * mind.FRAME * 2)   # includes the audio before speech
 
     def test_nobody_speaks(self):
-        seg = mind.Segmenter(noise_rms=400)
-        res = [seg.feed(frame(300)) for _ in range(seg.start_frames)]
+        ep = mind.Endpointer(FakeVad(), start_s=0.3)
+        res = [ep.feed(frame(300)) for _ in range(ep.start_frames)]
         self.assertEqual(res[-1], (True, None))
 
     def test_long_speech_is_cut(self):
-        seg = mind.Segmenter(noise_rms=400, max_s=1.0)
-        res = [seg.feed(frame(3000)) for _ in range(seg.max_frames)]
+        ep = mind.Endpointer(FakeVad(), max_s=0.6)
+        res = [ep.feed(frame(6000)) for _ in range(ep.max_frames)]
         self.assertTrue(res[-1][0])
         self.assertIsNotNone(res[-1][1])
 
-    def test_threshold_has_a_floor(self):
-        self.assertEqual(mind.Segmenter(noise_rms=10).threshold, 300.0)
+    def test_floats_scale(self):
+        self.assertEqual(mind.floats(array.array("h", [16384, -32768]).tobytes()), [0.5, -1.0])
 
 
 class TextTests(unittest.TestCase):

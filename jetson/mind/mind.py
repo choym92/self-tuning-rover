@@ -4,9 +4,10 @@
   microphone (arecord) -> wake -> record until silence -> Whisper (rover-stt) -> LLM on the Mac mini
   (rover-brainlink) -> Supertonic sentence by sentence (rover-tts-st) -> speaker (aplay), half-duplex
 
-Every step is written to a day-file JSONL journal. The wake detector is pluggable; until the
-"Hey Kalman" model exists, POST /listen on the local control port wakes Kalman (push to talk).
-Runs with host networking so all services are on the Jetson's loopback (jetson/mind/README.md).
+Wake: sherpa-onnx keyword spotting ("HEY KALMAN", English zipformer, no training) or POST /listen on
+the local control port. End of speech: Silero VAD (through sherpa-onnx). Every step is written to a
+day-file JSONL journal. Runs with host networking so all services are on the Jetson's loopback
+(jetson/mind/README.md).
 """
 import argparse
 import array
@@ -38,32 +39,82 @@ def rms(frame):
     return math.sqrt(sum(x * x for x in a) / max(len(a), 1))
 
 
-class Segmenter:
-    """Energy end-of-speech detector. Feed 30 ms frames after the wake; it returns the utterance once
-    speech has started and then stayed quiet for `silence_s`, or at `max_s`, or None if nobody spoke
-    within `start_s`. The threshold follows the room: `factor` times the quiet level before the wake."""
+def floats(frame):
+    return [x / 32768.0 for x in array.array("h", frame)]
 
-    def __init__(self, noise_rms, factor=2.0, floor=300.0, silence_s=0.7, start_s=4.0, max_s=8.0):
-        self.threshold = max(floor, noise_rms * factor)
-        self.silence_frames = int(silence_s * RATE / FRAME)
+
+class Endpointer:
+    """End of the spoken request after a wake. A VAD (Silero through sherpa-onnx; anything with
+    accept_waveform / is_speech_detected / empty / pop / reset) decides speech; the request ends when
+    the VAD closes a speech segment (its own silence timer), at `max_s`, or with nothing if nobody
+    spoke within `start_s`. The audio sent on is everything since the wake, so nothing is clipped."""
+
+    def __init__(self, vad, start_s=4.0, max_s=8.0):
+        self.vad = vad
+        self.vad.reset()
         self.start_frames = int(start_s * RATE / FRAME)
         self.max_frames = int(max_s * RATE / FRAME)
-        self.frames, self.quiet, self.started, self.n = [], 0, False, 0
+        self.frames, self.started, self.n = [], False, 0
 
     def feed(self, frame):
         """Returns (done, pcm or None)."""
         self.n += 1
-        loud = rms(frame) >= self.threshold
         self.frames.append(frame)
-        if loud:
-            self.started, self.quiet = True, 0
-        elif self.started:
-            self.quiet += 1
-        if not self.started and self.n >= self.start_frames:
+        self.vad.accept_waveform(floats(frame))
+        if self.vad.is_speech_detected():
+            self.started = True
+        closed = False
+        while not self.vad.empty():
+            self.vad.pop()
+            closed = True
+        if not self.started and not closed and self.n >= self.start_frames:
             return True, None
-        if self.started and (self.quiet >= self.silence_frames or self.n >= self.max_frames):
+        if closed or (self.started and self.n >= self.max_frames):
             return True, b"".join(self.frames)
         return False, None
+
+
+def make_vad(model, silence_s=0.7):
+    import sherpa_onnx
+    cfg = sherpa_onnx.VadModelConfig()
+    cfg.silero_vad.model = model
+    cfg.silero_vad.threshold = 0.5
+    cfg.silero_vad.min_silence_duration = silence_s
+    cfg.silero_vad.min_speech_duration = 0.15
+    cfg.sample_rate = RATE
+    return sherpa_onnx.VoiceActivityDetector(cfg, buffer_size_in_seconds=30)
+
+
+class Spotter:
+    """'Hey Kalman' keyword spotting: sherpa-onnx streaming zipformer with a text keyword list."""
+
+    def __init__(self, model_dir, keywords, score=1.5, threshold=0.25):
+        import sherpa_onnx
+        d = model_dir
+        tokens, bpe = os.path.join(d, "tokens.txt"), os.path.join(d, "bpe.model")
+        kw_file = "/tmp/keywords.txt"
+        encoded = sherpa_onnx.text2token([k.upper() for k in keywords], tokens=tokens, tokens_type="bpe", bpe_model=bpe)
+        with open(kw_file, "w") as f:
+            for raw, toks in zip(keywords, encoded):
+                f.write(" ".join(toks) + f" @{raw.upper().replace(' ', '_')}\n")
+        self.kws = sherpa_onnx.KeywordSpotter(
+            tokens=tokens, encoder=os.path.join(d, "encoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx"),
+            decoder=os.path.join(d, "decoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx"),
+            joiner=os.path.join(d, "joiner-epoch-12-avg-2-chunk-16-left-64.int8.onnx"),
+            num_threads=1, keywords_file=kw_file, keywords_score=score, keywords_threshold=threshold, provider="cpu")
+        self.stream = self.kws.create_stream()
+
+    def feed(self, frame):
+        """Returns the keyword heard, or ''."""
+        self.stream.accept_waveform(RATE, floats(frame))
+        hit = ""
+        while self.kws.is_ready(self.stream):
+            self.kws.decode_stream(self.stream)
+            r = self.kws.get_result(self.stream)
+            if r:
+                hit = r
+                self.kws.reset_stream(self.stream)
+        return hit
 
 
 def wav_bytes(pcm, rate=RATE):
@@ -143,6 +194,8 @@ class Mind:
         self.persona = open(args.persona, encoding="utf-8").read().strip()
         self.journal = Journal(args.journal)
         self.wake = threading.Event()
+        self.vad = make_vad(args.vad_model)
+        self.spotter = Spotter(args.kws_dir, args.keywords) if args.kws_dir else None
         self.state = "starting"
         self.speaking = False
         self.recent = deque(maxlen=int(1.0 * RATE / FRAME))     # pre-roll and noise level
@@ -183,14 +236,13 @@ class Mind:
         return False
 
     # --- one turn -------------------------------------------------------------------------
-    def turn(self, source, frames):
+    def turn(self, source, frames, keyword=""):
         self.speaking = True
         self.play(tone())
         self.speaking = False
         t0 = time.monotonic()
-        self.journal.write("wake", source=source)
-        noise = sorted(rms(f) for f in self.recent)[len(self.recent) // 2] if self.recent else 500.0
-        seg = Segmenter(noise)
+        self.journal.write("wake", source=source, keyword=keyword)
+        seg = Endpointer(self.vad)
         pcm = None
         for frame in frames:
             done, pcm = seg.feed(frame)
@@ -254,14 +306,18 @@ class Mind:
             if self.speaking:
                 continue                       # half-duplex: ignore our own voice
             self.recent.append(frame)
-            if self.wake.is_set():
+            keyword = self.spotter.feed(frame) if self.spotter else ""
+            if keyword or self.wake.is_set():
+                source = "keyword" if keyword else "button"
                 self.wake.clear()
                 self.state = "turn"
                 try:
-                    self.turn("button", src)
+                    self.turn(source, src, keyword)
                 except Exception as e:
                     self.journal.write("error", where="turn", error=str(e))
                 self.recent.clear()
+                if self.spotter:
+                    self.spotter.kws.reset_stream(self.spotter.stream)
                 self.state = "listening"
 
 
@@ -307,6 +363,10 @@ def main():
     ap.add_argument("--journal", default="/journal")
     ap.add_argument("--voice-dir", default="/voice")
     ap.add_argument("--port", type=int, default=8096)
+    ap.add_argument("--vad-model", default="/models/sherpa/silero_vad.onnx")
+    ap.add_argument("--kws-dir", default="/models/sherpa/sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01",
+                    help="'' to wake only by POST /listen")
+    ap.add_argument("--keywords", nargs="+", default=["HEY KALMAN"])
     args = ap.parse_args()
     mind = Mind(args)
     control_server(mind, args.port)

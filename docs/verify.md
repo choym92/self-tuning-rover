@@ -566,6 +566,22 @@ local Gemma median 0.38 s (0.33-0.46). One `/health` round trip through the tunn
 (single sample, not explained). The tunnel reconnected about 3 s after its SSH session was killed on
 the mini.
 
+Gemma 4 E4B (`unsloth/gemma-4-E4B-it-GGUF` Q4_K_M, 4.98 GB, sha256 `85a896a0...ab87` checked) on the
+same mini, engine and flags, side port, same day 17:10 EST. Twelve persona questions (6 English, 6
+Korean, temperature 0.7, seed 7) and the harness:
+
+| | E2B | E4B |
+|---|---|---|
+| Generation | 52-56 tok/s | 28-30 tok/s |
+| Prompt (harness median) | 377 ms | 515 ms |
+| Wall time per persona reply | 0.6-1.1 s | 1.0-2.1 s |
+| Harness tools / honesty | 8/10, 5/5 | 9/10, 4/5 (1 for review) |
+| "What did we talk about yesterday?" (no memory exists) | invented a topic in both languages | said it did not know in both languages |
+
+Both stayed in persona and answered Korean in 반말; E4B's replies were shorter and its one joke was
+about its own day as the persona asks. Mini memory free fell to 27 % with both models loaded.
+Korean harness grading stays unusable (1/5 for every model so far).
+
 ## Rover microphone and Whisper: can it understand Paul? (2026-11-07, Jetson on the rover)
 
 Camera microphone (`plughw:0,0`, gain 100 %), Paul speaking, `jetson/voice/mic_test.py`, six English
