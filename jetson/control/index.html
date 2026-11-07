@@ -112,7 +112,7 @@ input[type=range] { width:100%; accent-color:var(--accent); margin:0; }
     </div>
     <div class="card">
       <div class="title">Head</div>
-      <div class="pad" id="pad"><div class="vl"></div><div class="hl"></div><div class="tgt" id="tgt"></div><div class="dot" id="dot"></div></div>
+      <div class="pad" id="pad"><div class="vl"></div><div class="hl" id="hl"></div><div class="tgt" id="tgt"></div><div class="dot" id="dot"></div></div>
       <div class="grid mono">
         <span>Target</span><span id="h-tgt">0.0° / 0.0°</span>
         <span>Actual</span><span id="h-act">--</span>
@@ -300,6 +300,7 @@ input[type=range] { width:100%; accent-color:var(--accent); margin:0; }
       $("h-lim").textContent = "±" + h.pan_limit + "° / " + h.tilt_min + "…" + h.tilt_max + "°";
       const px = (p) => (50 + (Number(p) / h.pan_limit) * 50) + "%";        // positive pan = head right = dot right
       const py = (t) => (50 - ((Number(t) - (h.tilt_min + h.tilt_max) / 2) / ((h.tilt_max - h.tilt_min) / 2)) * 50) + "%";
+      $("hl").style.top = py(0);                                              // the tilt range is not symmetric, so 0° is not mid-box
       $("tgt").style.left = px(h.pan); $("tgt").style.top = py(h.tilt);
       if (fb.pan != null) { $("dot").style.left = px(fb.pan); $("dot").style.top = py(fb.tilt); }
     }
