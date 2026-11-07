@@ -23,6 +23,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 SIZE, FPS = (848, 480), 30
 JPEG_QUALITY = 80
 DEPTH_NEAR, DEPTH_FAR = 0.3, 4.0      # metres mapped onto the colour scale for the depth picture
+DEPTH_PICTURE_FPS = 15                # default rate of /depth.mjpg; the raw stream stays at 30 fps
+DEPTH_PICTURE_SCALE = 0.5             # the depth picture is drawn at half size (a colour map needs no more)
 
 
 class RealSenseSource:
@@ -76,14 +78,16 @@ class CvEncoder:
         return buf.tobytes() if ok else b""
 
     def depth_jpeg(self, depth, scale):
-        """Near = blue, far = red (the same convention as d436_check.py); no data = black."""
+        """Near = blue, far = red (the same convention as d436_check.py); no data = black.
+        Drawn at half size with OpenCV's saturating 16-to-8-bit conversion: no float image."""
         import cv2
         import numpy as np
-        m = depth.astype(np.float32) * scale
-        valid = m > 0
-        v = np.clip((m - DEPTH_NEAR) / (DEPTH_FAR - DEPTH_NEAR), 0, 1)
-        img = cv2.applyColorMap((v * 255).astype(np.uint8), cv2.COLORMAP_JET)
-        img[~valid] = 0
+        if DEPTH_PICTURE_SCALE != 1.0:
+            depth = cv2.resize(depth, None, fx=DEPTH_PICTURE_SCALE, fy=DEPTH_PICTURE_SCALE, interpolation=cv2.INTER_NEAREST)
+        near, span = DEPTH_NEAR / scale, (DEPTH_FAR - DEPTH_NEAR) / scale
+        idx = cv2.convertScaleAbs(np.maximum(depth, int(near)), alpha=255.0 / span, beta=-near * 255.0 / span)
+        img = cv2.applyColorMap(idx, cv2.COLORMAP_JET)
+        img[depth == 0] = 0
         ok, buf = cv2.imencode(".jpg", img, [int(cv2.IMWRITE_JPEG_QUALITY), self.quality])
         return buf.tobytes() if ok else b""
 
@@ -108,23 +112,38 @@ class Eyes:
         self._times = deque()
         self._cache = {}            # kind -> (seq, jpeg bytes)
         self._stats = {}
+        self.enabled = True              # False = standby: the camera is released, nothing is read
         self.connected, self.error, self.clients = False, None if source else "no camera", 0
         if source is not None:
             threading.Thread(target=self._reader, daemon=True).start()
 
     def _reader(self):
         while True:
+            if not self.enabled:
+                self.connected, self.error = False, "standby"
+                time.sleep(0.5)
+                continue
             try:
                 self.source.start()
                 self.error = None
-                while True:
+                while self.enabled:
                     pair = self.source.read()
                     if pair is not None:
                         self.push(*pair)
             except Exception as e:          # camera unplugged, USB reset, no device yet
                 self.connected, self.error = False, str(e).strip().split("\n")[0][:120]
             self.source.stop()
-            time.sleep(2.0)
+            self.connected = False
+            if self.enabled:
+                time.sleep(2.0)
+
+    def set_enabled(self, on):
+        """Standby releases the D436 (no USB traffic, no reader CPU); waking takes a few seconds."""
+        self.enabled = bool(on)
+        if not self.enabled:
+            self.connected, self.error = False, "standby"
+        with self._cond:
+            self._times.clear()
 
     def push(self, color, depth):
         now = time.monotonic()
@@ -163,7 +182,7 @@ class Eyes:
 
     def state(self):
         with self._cond:
-            s = {"connected": self.connected, "fps": round(len(self._times) / 2.0, 1),
+            s = {"connected": self.connected, "enabled": self.enabled, "fps": round(len(self._times) / 2.0, 1),
                  "size": "%dx%d" % tuple(SIZE), "age_s": None if not self._t else round(time.monotonic() - self._t, 2),
                  "clients": self.clients, "error": self.error, "frames": self._seq}
             s.update(self._stats)
@@ -203,9 +222,9 @@ def make_handler(eyes):
             elif path in ("/color.mjpg", "/depth.mjpg"):
                 kind = path[1:-5]
                 try:
-                    interval = 1.0 / max(1.0, min(30.0, float(params.get("fps", 30))))
+                    interval = 1.0 / max(1.0, min(30.0, float(params.get("fps", DEPTH_PICTURE_FPS if kind == "depth" else FPS))))
                 except ValueError:
-                    interval = 1.0 / 30
+                    interval = 1.0 / FPS
                 self.send_response(200)
                 self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
                 self.send_header("Cache-Control", "no-store")
@@ -231,6 +250,21 @@ def make_handler(eyes):
                     return
                 finally:
                     eyes.clients -= 1
+            else:
+                self._send(404, "application/json", b'{"error": "not found"}')
+
+        def do_POST(self):
+            if self.path.split("?")[0] == "/api/camera":
+                n = int(self.headers.get("Content-Length") or 0)
+                try:
+                    body = json.loads(self.rfile.read(n)) if 0 < n <= 4096 else {}
+                except ValueError:
+                    body = {}
+                if "on" not in body:
+                    self._send(400, "application/json", json.dumps({"error": "expected {\"on\": true|false}"}).encode())
+                    return
+                eyes.set_enabled(body["on"])
+                self._send(200, "application/json", json.dumps(eyes.state()).encode())
             else:
                 self._send(404, "application/json", b'{"error": "not found"}')
 

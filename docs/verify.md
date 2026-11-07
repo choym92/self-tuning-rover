@@ -495,7 +495,11 @@ near centre, hallway scene); colour JPEG q80 about 36 kB, depth picture about 36
 | page showing depth at 30 fps + 5 MP small picture | 82 MiB | **59%** | 30 MiB / 4% |
 
 System memory with Gemma, Whisper, Supertonic, control and eyes: 5.6 GB used, 1.8 GB available;
-CPU 47.8 C. The depth colouring (float conversion + colour map at 30 fps) is most of the 59%;
-integer mapping and a lower default depth rate are the planned reductions. The tilt bracket shows
+CPU 47.8 C. The depth colouring (float conversion + colour map at 30 fps) was most of the 59%.
+Same day, after the changes: depth picture at 15 fps with integer arithmetic at full size 47%;
+drawn at half size (424x240, OpenCV saturating conversion, picture 15 kB) **26-28%** over three
+samples, 73 MiB; 5 MP big + D436 colour small at 5 fps 23%. Camera standby (`POST /api/camera
+{"on": false}`): 0.2% CPU, 55 MiB, the UVC interfaces stay bound to the kernel; waking took 1.5 s to
+the first frame and the stream was back at 30 fps 3 s later. The eyes container restarts in 3 s. The tilt bracket shows
 as the black lower-right region in both D436 views. The page's three-source selector and the small
 picture were checked in the built-in browser; 17 unit tests pass on the Mac (15 control, 2 eyes).

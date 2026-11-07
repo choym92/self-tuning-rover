@@ -27,6 +27,7 @@ import sys
 import termios
 import threading
 import time
+import urllib.error
 import urllib.request
 from collections import deque
 from datetime import datetime, timezone
@@ -490,6 +491,23 @@ def make_handler(controller, page_path, camera=None, eyes=None):
                 self._json(404, {"error": "not found"})
 
         def do_POST(self):
+            if self.path.startswith("/d436/"):
+                # Commands for the eyes service (camera standby); same pass-through as the GETs.
+                if not eyes.base:
+                    self._json(503, {"error": "eyes service not configured"})
+                    return
+                n = int(self.headers.get("Content-Length") or 0)
+                raw = self.rfile.read(n) if 0 < n <= 4096 else b"{}"
+                req = urllib.request.Request(eyes.base + self.path[len("/d436"):], data=raw, method="POST",
+                                             headers={"Content-Type": "application/json"})
+                try:
+                    with urllib.request.urlopen(req, timeout=5) as up:
+                        self._bytes(up.status, up.headers.get("Content-Type", "application/json"), up.read())
+                except urllib.error.HTTPError as e:
+                    self._bytes(e.code, e.headers.get("Content-Type", "application/json"), e.read())
+                except Exception:
+                    self._json(503, {"error": "eyes service unreachable"})
+                return
             body = self._body()
             if self.path == "/api/drive":
                 result = controller.drive(body.get("l"), body.get("r"))

@@ -178,6 +178,15 @@ class FakeEyesHandler(server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def do_POST(self):
+        n = int(self.headers.get("Content-Length") or 0)
+        body = b'{"echo": ' + (self.rfile.read(n) if n else b"null") + b"}"
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
 
 class ApiTests(unittest.TestCase):
     def setUp(self):
@@ -263,6 +272,8 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(self.call("GET", "/api/state")[1]["d436"]["center_m"], 2.47)
         with urllib.request.urlopen(self.base + "/d436/color.jpg", timeout=5) as r:
             self.assertEqual((r.status, r.headers["Content-Type"], r.read()), (200, "image/jpeg", b"\xff\xd8eyes"))
+        code, body = self.call("POST", "/d436/api/camera", {"on": False})
+        self.assertEqual((code, body), (200, {"echo": {"on": False}}))
         dead = server.make_handler(self.ctl, os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html"),
                                    self.cam, server.EyesLink("http://127.0.0.1:1"))
         httpd = server.ThreadingHTTPServer(("127.0.0.1", 0), dead)

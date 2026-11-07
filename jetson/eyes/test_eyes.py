@@ -81,6 +81,23 @@ class ApiTests(unittest.TestCase):
         stream.close()
         self.assertEqual(self.get("/nope")[0], 404)
 
+    def test_standby_api(self):
+        def post(body):
+            req = urllib.request.Request(self.base + "/api/camera", data=json.dumps(body).encode(), method="POST",
+                                         headers={"Content-Type": "application/json"})
+            try:
+                with urllib.request.urlopen(req, timeout=5) as r:
+                    return r.status, json.loads(r.read())
+            except urllib.error.HTTPError as e:
+                return e.code, json.loads(e.read())
+        self.eyes.push(b"c1", b"d1")
+        self.assertTrue(self.get("/api/state")[2] and json.loads(self.get("/api/state")[2])["enabled"])
+        code, st = post({"on": False})
+        self.assertEqual((code, st["enabled"], st["connected"], st["error"], st["fps"]), (200, False, False, "standby", 0.0))
+        code, st = post({"on": True})
+        self.assertEqual((code, st["enabled"]), (200, True))
+        self.assertEqual(post({})[0], 400)
+
 
 if __name__ == "__main__":
     unittest.main()

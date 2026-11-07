@@ -82,4 +82,4 @@ buttons on the picture choose what fills the big view; the small view shows the 
 | `POST /api/head {"pan","tilt"} or {"dpan","dtilt"}` | absolute or relative head move, clamped; 403 under emergency stop |
 | `GET /video.mjpg` | Motion JPEG stream of the camera's own frames (multipart/x-mixed-replace) |
 | `GET /frame.jpg` | the newest single frame; 503 until the camera delivers |
-| `GET /d436/...` | pass-through to the eyes service (`jetson/eyes/README.md`): `color.mjpg`, `depth.mjpg`, `color.jpg`, `depth.jpg`, `api/state`; 503 when it is down |
+| `GET`/`POST /d436/...` | pass-through to the eyes service (`jetson/eyes/README.md`): `color.mjpg`, `depth.mjpg`, `color.jpg`, `depth.jpg`, `api/state`, `POST api/camera` (standby); 503 when it is down |

@@ -37,9 +37,10 @@ python3 -B -m unittest discover -s jetson/eyes -p 'test_*.py' -v
 | Call | Effect |
 |---|---|
 | `GET /color.mjpg[?fps=N]` | colour 848x480 as Motion JPEG (quality 80); `fps` thins the stream for small views |
-| `GET /depth.mjpg[?fps=N]` | depth coloured blue (0.3 m) to red (4 m), black = no data |
+| `GET /depth.mjpg[?fps=N]` | depth coloured blue (0.3 m) to red (4 m), black = no data; 15 fps by default (the raw stream stays at 30) |
 | `GET /color.jpg`, `/depth.jpg` | newest single frame; 503 until the camera delivers |
-| `GET /api/state` | connected, fps, valid depth fraction, centre distance (m), serial, firmware, USB type, clients |
+| `GET /api/state` | connected, enabled, fps, valid depth fraction, centre distance (m), serial, firmware, USB type, clients |
+| `POST /api/camera {"on": false}` | standby: the camera is released (no USB traffic, no reader CPU); `{"on": true}` reopens it in a few seconds |
 
 Depth pictures are for eyes only: measurement and recording use the raw 16-bit frames inside this
 process, never the JPEG. The tilt bracket shows in the lower right until it is moved
