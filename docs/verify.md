@@ -454,3 +454,29 @@ Incident while playing the clips: the desktop session's PulseAudio (`/usr/bin/pu
 pid 20368) opened `pcmC1D0p` for a few seconds each time `aplay` released it, so direct
 `aplay -D plughw:1,0` failed with "Device or resource busy" on three of six attempts and
 succeeded on retry. Earlier spoken turns on 2026-11-06 did not hit this.
+
+## Console stage 2: camera view in the page, D436 connected on the rover (2026-11-07, Jetson on the rover)
+
+- `/video.mjpg` from `jetson/control/server.py` (OpenCV V4L2 raw mode hands over the 5 MP camera's own JPEG
+  frames, no decode): 1280x720 at 20.5 fps, about 65-72 kB per frame (1.4 MB/s). The control container
+  used 29 MiB and 1% CPU with no viewer, 31 MiB and 2% CPU with one viewer over the SSH tunnel; CPU
+  temperature 49.6 C. Unit tests: 14 pass on the Mac. The page was checked in the built-in browser and in
+  Chrome on the Mac; the page's time stamp is now rendered in the browser's local zone (the container
+  reports UTC).
+- The camera stayed at `/dev/video0` while the D436 was plugged in (D436 took video2/4/5/7); stable names
+  exist under `/dev/v4l/by-id/` (`usb-Xitech_USB_Camera_20250606105-video-index0` for the 5 MP camera).
+- D436 on the pan-tilt head with a spare USB-C to USB-A cable from the house (longer than needed): the
+  kernel enumerated it as SuperSpeed on the Jetson's 10 Gbps internal hub, 5000 Mbps, librealsense
+  reported "usb 3.2". It dropped off the bus once ("USB disconnect" 2.5 minutes after plugging, while the
+  cable was being handled) and came back at 5000 Mbps after re-seating.
+- `d436_check.py --seconds 5` on the rover, head near centre, room scene down a hallway: depth 848x480,
+  69% valid pixels, 0.18-12.2 m, centre 2.47 m; depth and color 23.7 fps with CPU-side alignment (as on
+  2026-10-03); accel 96 Hz, gyro 188 Hz, |a| 9.71 m/s2 at rest. The saved frame shows a dark, out-of-focus
+  object in the lower right of the D436 colour image (about a quarter of the width) with no depth data
+  there, and a smaller dark shape in the lower-right corner of the 5 MP frame. Tilting the head up 10 deg
+  (second 5 s run: 70% valid, centre 2.50 m, 20.9 fps, accel 84 Hz, gyro 164 Hz while the console stream
+  was also running) left the object in exactly the same place, so it moves with the camera: Paul identified
+  it as the **tilt bracket**. About a tenth of the colour image (lower right) and the near floor in the
+  depth image are blocked, and the bracket reads as a permanent 0.2-0.5 m "obstacle" in depth. Fix deferred
+  by Paul (move the D436 forward 1-2 cm or add a spacer under it); a software mask is the fallback. The
+  5 MP frame does not show the D436's underside.

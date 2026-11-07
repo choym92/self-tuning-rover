@@ -97,10 +97,15 @@ Next steps:
   Korean (Whisper, Gemma with thinking off, Supertonic 3 voice M1 in `jetson/tts/supertonic/`).
   Kokoro is installed but off. Whisper is still English-only; Paul speaking to the robot is
   untested; speaker is at its hardware maximum (external speaker via the 3.5 mm jack if louder).
-- Pending: D436 USB cable, UART soak under vision load, memory plan once vision returns
-  (Gemma + Whisper + Kokoro already use about 6 GB).
-- Final microphone: not purchased. Test the Waveshare audio board first; the
-  planned fallback is a Seeed reSpeaker XVF3800 USB four-mic array.
+- D436 is connected on the head (2026-11-07, spare USB-C to USB-A cable, USB 3 confirmed) and streams
+  depth, colour and IMU on the rover (`docs/verify.md`). TODO (Paul, deferred): the tilt bracket blocks the
+  lower right of the D436 view; move the camera forward 1-2 cm or add a spacer. Cable ties for the slack.
+- Pending: UART soak under vision load, memory plan once vision returns
+  (Gemma + Whisper + Supertonic use about 5.6 GB; 2.0 GB free).
+- Final microphone: not purchased. The Waveshare audio board's microphones are switched off by a
+  4-position DIP switch ("earphone MIC | MIC") under the Jetson carrier (`docs/setup-log.md`, 2026-11-07);
+  flip it at the next tear-down. The camera microphone is used meanwhile; the fallback is a Seeed
+  reSpeaker XVF3800 USB four-mic array.
 
 ## Documentation health
 

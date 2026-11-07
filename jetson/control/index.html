@@ -7,51 +7,61 @@
 <style>
 :root { --bg:#0e141b; --panel:#151d26; --line:#263241; --ink:#e6edf3; --muted:#8b98a8; --accent:#4cc3c0; --amber:#f0c674; --red:#e5484d; --green:#4ad17a; }
 * { box-sizing: border-box; }
-body { margin:0; background:var(--bg); color:var(--ink); font-family:"Noto Sans KR",system-ui,sans-serif; font-size:14px; line-height:20px; }
+body { margin:0; background:var(--bg); color:var(--ink); font-family:"Noto Sans KR",system-ui,sans-serif; font-size:13px; line-height:18px; }
 .mono { font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace; font-variant-numeric:tabular-nums; }
-header { display:flex; flex-wrap:wrap; align-items:center; gap:10px 18px; padding:12px 20px; background:#121a23; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:2; }
+header { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; padding:10px 16px; background:#121a23; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:2; }
 .dot { width:10px; height:10px; border-radius:50%; background:var(--green); display:inline-block; }
 .dot.bad { background:var(--red); }
-.chip { padding:4px 10px; border:1px solid var(--line); border-radius:6px; font-size:12.5px; color:#c9d4df; }
+.chip { padding:3px 9px; border:1px solid var(--line); border-radius:6px; font-size:12px; color:#c9d4df; white-space:nowrap; }
 .chip.ok { border-color:#2f5a3a; color:#8fe0a6; } .chip.warn { border-color:#5a4a1f; color:var(--amber); } .chip.bad { border-color:#6b2a2d; color:#ff8a8e; }
 .spacer { flex:1 1 auto; }
-button { min-height:44px; padding:0 18px; border-radius:8px; border:1px solid #334256; background:#1f2a36; color:var(--ink); font:inherit; cursor:pointer; }
+button { min-height:40px; padding:0 14px; border-radius:8px; border:1px solid #334256; background:#1f2a36; color:var(--ink); font:inherit; cursor:pointer; }
 button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
-#estop { background:var(--red); border-color:var(--red); color:#fff; font-weight:700; font-size:16px; min-height:48px; padding:0 22px; letter-spacing:.04em; }
+#estop { background:var(--red); border-color:var(--red); color:#fff; font-weight:700; font-size:15px; min-height:44px; padding:0 20px; }
 #reset { border-color:#5a4a1f; color:var(--amber); background:#2a2416; }
-main { display:flex; flex-wrap:wrap; gap:16px; padding:16px 20px; }
-.card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px 16px; display:flex; flex-direction:column; gap:10px; min-width:0; }
-.col { display:flex; flex-direction:column; gap:12px; min-width:0; }
-.drive { flex:1 1 320px; } .tele { flex:2 1 420px; }
+main { display:grid; grid-template-columns:minmax(0,1fr) 320px; gap:14px; padding:14px 16px; align-items:start; }
+@media (max-width: 900px) { main { grid-template-columns:1fr; } }
+.side { display:flex; flex-direction:column; gap:12px; min-width:0; }
+.card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px 14px; display:flex; flex-direction:column; gap:8px; min-width:0; }
 .title { display:flex; justify-content:space-between; align-items:baseline; font-weight:500; }
-.title small { color:var(--muted); font-weight:400; font-size:12px; }
-.keys { display:grid; grid-template-columns:repeat(3,56px); gap:6px; justify-content:center; }
-.key { height:48px; display:flex; align-items:center; justify-content:center; border-radius:8px; background:#1f2a36; border:1px solid #334256; font-weight:600; transition:background .08s; }
+.title small { color:var(--muted); font-weight:400; font-size:11.5px; }
+.keys { display:grid; grid-template-columns:repeat(3,44px); gap:5px; justify-content:center; }
+.key { height:40px; display:flex; align-items:center; justify-content:center; border-radius:7px; background:#1f2a36; border:1px solid #334256; font-weight:600; transition:background .08s; }
 .key.on { background:var(--accent); color:#0e141b; border-color:var(--accent); }
-.grid { display:grid; grid-template-columns:auto 1fr; gap:6px 14px; font-size:13px; }
+.grid { display:grid; grid-template-columns:auto 1fr; gap:4px 12px; font-size:12.5px; }
 .grid span:nth-child(odd) { color:var(--muted); }
-.big { font-size:26px; line-height:30px; }
-.banner { display:none; padding:10px 14px; border-radius:8px; font-weight:500; }
+.big { font-size:22px; line-height:26px; }
+.banner { display:none; padding:8px 12px; border-radius:8px; font-size:12.5px; }
 .banner.show { display:block; }
 .banner.red { background:#3a1b1d; color:#ff8a8e; border:1px solid #6b2a2d; }
 .banner.amber { background:#2a2416; color:var(--amber); border:1px solid #5a4a1f; }
-input[type=range] { width:100%; accent-color:var(--accent); }
-.hint { color:var(--muted); font-size:12.5px; }
-.pad { position:relative; width:100%; max-width:240px; aspect-ratio:2/1; margin:0 auto; border:1px solid #334256; border-radius:8px; background:#1a222c; }
+input[type=range] { width:100%; accent-color:var(--accent); margin:0; }
+.pad { position:relative; width:100%; max-width:200px; aspect-ratio:2/1; margin:0 auto; border:1px solid #334256; border-radius:8px; background:#1a222c; }
 .pad .vl { position:absolute; left:50%; top:0; bottom:0; width:1px; background:var(--line); }
 .pad .hl { position:absolute; top:50%; left:0; right:0; height:1px; background:var(--line); }
 .pad .dot { position:absolute; width:12px; height:12px; margin:-6px 0 0 -6px; border-radius:50%; background:var(--accent); left:50%; top:50%; transition:left .15s, top .15s; }
 .pad .tgt { position:absolute; width:16px; height:16px; margin:-8px 0 0 -8px; border-radius:50%; border:1.5px solid var(--amber); left:50%; top:50%; }
-.arrows { display:grid; grid-template-columns:repeat(3,56px); gap:6px; justify-content:center; }
-.arrows button { min-height:44px; padding:0; font-size:18px; }
+.arrows { display:grid; grid-template-columns:repeat(3,44px); gap:5px; justify-content:center; }
+.arrows button { min-height:40px; padding:0; font-size:16px; }
+.video { display:flex; flex-direction:column; gap:10px; min-width:0; }
+.vid { position:relative; background:#000; border:1px solid var(--line); border-radius:10px; overflow:hidden; aspect-ratio:16/9; width:100%; max-height:calc(100vh - 100px); }
+.vid img { display:block; width:100%; height:100%; object-fit:contain; }
+.vid img:not([src]) { display:none; }
+.ov { position:absolute; display:flex; flex-wrap:wrap; gap:6px; pointer-events:none; }
+.ov.tl { top:10px; left:10px; } .ov.bl { bottom:10px; left:10px; } .ov.tr { top:10px; right:10px; pointer-events:auto; }
+.ov .chip { background:rgba(14,20,27,.72); }
+.ov button { min-height:28px; padding:0 10px; font-size:12px; background:rgba(14,20,27,.72); }
+.nocam { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--muted); background:#0b1016; }
+.nocam[hidden] { display:none; }
 </style>
 </head>
 <body>
 <header>
   <span id="linkdot" class="dot bad"></span>
-  <strong>Wall-E</strong><span style="color:var(--muted)">관제실 · 1단계</span>
+  <strong>Wall-E</strong>
   <span id="c-link" class="chip mono">LINK --</span>
   <span id="c-uart" class="chip mono">UART --</span>
+  <span id="c-cam" class="chip mono">CAM --</span>
   <span id="c-clock" class="chip mono">CLOCK --</span>
   <span id="c-bat" class="chip mono">BAT --</span>
   <span id="c-mode" class="chip mono">DRIVE --</span>
@@ -60,57 +70,60 @@ input[type=range] { width:100%; accent-color:var(--accent); }
   <button id="estop" type="button">비상 정지 (Space)</button>
 </header>
 <main>
-  <div class="col drive">
-    <div id="b-estop" class="banner red">비상 정지 상태. 바퀴 명령을 받지 않습니다. 해제 버튼을 누르면 다시 움직일 수 있습니다.</div>
-    <div id="b-disabled" class="banner amber">서버가 주행을 막아 둔 상태입니다 (텔레메트리만). 서버를 --allow-drive로 다시 시작해야 움직입니다.</div>
-    <div id="b-bat" class="banner red">배터리가 9.6 V 아래입니다. 주행이 거부됩니다. 충전하세요.</div>
+  <section class="video">
+    <div class="vid">
+      <img id="cam" alt="">
+      <div id="nocam" class="nocam">카메라 없음</div>
+      <div class="ov tl"><span id="v-cam" class="chip mono">CAM</span><span id="v-pt" class="chip mono">PAN -- · TILT --</span></div>
+      <div class="ov tr"><button id="vtoggle" type="button">영상 끄기</button></div>
+      <div class="ov bl"><span id="v-spd" class="chip mono">L -- · R --</span><span id="v-time" class="chip mono">--</span></div>
+    </div>
+    <div id="b-estop" class="banner red">비상 정지 중 — 해제 버튼을 누르면 다시 움직입니다.</div>
+    <div id="b-disabled" class="banner amber">주행 잠김 — 서버가 텔레메트리 전용으로 떠 있습니다.</div>
+    <div id="b-bat" class="banner red">배터리 9.6 V 미만 — 주행이 거부됩니다.</div>
+  </section>
+  <aside class="side">
     <div class="card">
-      <div class="title">운전 · 누르는 동안만 <small class="mono">W A S D</small></div>
+      <div class="title">운전 <small class="mono">WASD · 누르는 동안</small></div>
       <div class="keys">
         <div></div><div class="key" data-k="w">W</div><div></div>
         <div class="key" data-k="a">A</div><div class="key" data-k="s">S</div><div class="key" data-k="d">D</div>
       </div>
       <div class="grid mono">
         <span>요청</span><span id="req">0.00 / 0.00</span>
-        <span>보낸 PWM</span><span id="pwm">0 / 0</span>
+        <span>PWM</span><span id="pwm">0 / 0</span>
         <span>상태</span><span id="reason">--</span>
       </div>
-      <label for="cap" class="title">속도 상한 (PWM) <small class="mono" id="capv">--</small></label>
+      <label for="cap" class="title">속도 상한 <small class="mono" id="capv">--</small></label>
       <input id="cap" type="range" min="0" max="120" step="5" value="80">
-      <div class="hint">한/영 상태와 상관없이 W A S D 물리 키 · 키를 떼면 바로 정지 · 0.3 s 동안 신호가 없으면 젯슨이 정지 · 탭을 벗어나면 정지</div>
     </div>
-  </div>
-  <div class="col" style="flex:1 1 300px">
     <div class="card">
-      <div class="title">머리 (팬틸트) <small class="mono">방향키 · 누르는 동안 회전</small></div>
+      <div class="title">머리 <small class="mono">방향키 · 누르는 동안</small></div>
       <div class="pad" id="pad"><div class="vl"></div><div class="hl"></div><div class="tgt" id="tgt"></div><div class="dot" id="dot"></div></div>
       <div class="grid mono">
-        <span>목표 팬 / 틸트</span><span id="h-tgt">0.0° / 0.0°</span>
-        <span>실제 팬 / 틸트</span><span id="h-act">--</span>
-        <span>제한</span><span id="h-lim">--</span>
+        <span>목표</span><span id="h-tgt">0.0° / 0.0°</span>
+        <span>실제</span><span id="h-act">--</span>
+        <span>범위</span><span id="h-lim">--</span>
       </div>
       <div class="arrows">
         <div></div><button type="button" data-h="up" aria-label="위로">▲</button><div></div>
-        <button type="button" data-h="left" aria-label="왼쪽으로">◀</button><button type="button" id="center" aria-label="정면으로" style="font-size:13px">정면</button><button type="button" data-h="right" aria-label="오른쪽으로">▶</button>
+        <button type="button" data-h="left" aria-label="왼쪽으로">◀</button><button type="button" id="center" aria-label="정면으로" style="font-size:12px">정면</button><button type="button" data-h="right" aria-label="오른쪽으로">▶</button>
         <div></div><button type="button" data-h="down" aria-label="아래로">▼</button><div></div>
       </div>
-      <div class="hint">한 번에 3°씩 · 팬 ±120°, 틸트 −30…60° 안에서만 · 비상 정지 중에는 잠김</div>
     </div>
-  </div>
-  <div class="col tele">
     <div class="card">
-      <div class="title">로봇 상태 <small id="stamp" class="mono">--</small></div>
+      <div class="title">상태 <small id="stamp" class="mono">--</small></div>
       <div class="grid mono">
         <span>배터리</span><span id="t-bat" class="big">--</span>
-        <span>바퀴 속도 L / R</span><span id="t-spd">--</span>
-        <span>주행거리 L / R</span><span id="t-od">--</span>
+        <span>속도 L / R</span><span id="t-spd">--</span>
+        <span>거리 L / R</span><span id="t-od">--</span>
         <span>팬 / 틸트</span><span id="t-pt">--</span>
-        <span>가속도 (raw)</span><span id="t-acc">--</span>
-        <span>자이로 (raw)</span><span id="t-gyr">--</span>
-        <span>피드백</span><span id="t-fb">--</span>
+        <span>가속도</span><span id="t-acc">--</span>
+        <span>자이로</span><span id="t-gyr">--</span>
+        <span>UART</span><span id="t-fb">--</span>
       </div>
     </div>
-  </div>
+  </aside>
 </main>
 <script>
 (function () {
@@ -188,6 +201,18 @@ input[type=range] { width:100%; accent-color:var(--accent); }
   $("center").addEventListener("click", () => post("/api/head", { pan: 0, tilt: 0 }));
   window.addEventListener("blur", () => { headHeld.clear(); if (headTimer) { clearInterval(headTimer); headTimer = null; } });
 
+  // Video: the <img> gets its stream only while the SSE link is up, so a dead stream never hangs on screen.
+  let videoOn = true, videoSrcSet = false, linkOk = false;
+  function videoAttach(on) {
+    if (on && !videoSrcSet) { $("cam").src = "/video.mjpg?t=" + Date.now(); videoSrcSet = true; }
+    if (!on && videoSrcSet) { $("cam").removeAttribute("src"); videoSrcSet = false; }
+  }
+  $("vtoggle").addEventListener("click", () => {
+    videoOn = !videoOn;
+    $("vtoggle").textContent = videoOn ? "영상 끄기" : "영상 켜기";
+    videoAttach(videoOn && linkOk);
+  });
+
   function chip(el, text, cls) { el.textContent = text; el.className = "chip mono" + (cls ? " " + cls : ""); }
   function render(s) {
     lastState = s;
@@ -211,12 +236,20 @@ input[type=range] { width:100%; accent-color:var(--accent); }
     $("t-acc").textContent = [fb.ax, fb.ay, fb.az].map((x) => fmt(x, 0)).join("  ");
     $("t-gyr").textContent = [fb.gx, fb.gy, fb.gz].map((x) => fmt(x, 0)).join("  ");
     $("t-fb").textContent = (u.rate_hz || 0) + " Hz · age " + (u.feedback_age_s == null ? "--" : u.feedback_age_s + " s") + " · bad " + (u.bad_lines || 0);
-    $("stamp").textContent = (s.server_time || "").replace("T", " ");
+    const when = s.server_time ? new Date(s.server_time) : null;
+    $("stamp").textContent = when ? when.toLocaleString("sv-SE") : "--";
+    const c = s.camera || {};
+    chip($("c-cam"), c.ok ? "CAM " + fmt(c.fps, 0) + " fps" : "CAM off", c.ok ? "ok" : "warn");
+    $("nocam").hidden = !!c.ok;
+    $("v-cam").textContent = "5MP " + (c.size || "") + (c.ok ? " · " + fmt(c.fps, 0) + " fps" : " · " + (c.error || "없음"));
+    $("v-pt").textContent = "PAN " + fmt(fb.pan, 1) + "° · TILT " + fmt(fb.tilt, 1) + "°";
+    $("v-spd").textContent = "L " + fmt(fb.L, 2) + " · R " + fmt(fb.R, 2) + " m/s";
+    $("v-time").textContent = when ? when.toLocaleTimeString("sv-SE") : "--";
     const h = s.head || {};
     if (h.pan_limit) {
       $("h-tgt").textContent = fmt(h.pan, 1) + "° / " + fmt(h.tilt, 1) + "°";
       $("h-act").textContent = fmt(fb.pan, 1) + "° / " + fmt(fb.tilt, 1) + "°";
-      $("h-lim").textContent = "팬 ±" + h.pan_limit + "° · 틸트 " + h.tilt_min + "…" + h.tilt_max + "°";
+      $("h-lim").textContent = "±" + h.pan_limit + "° / " + h.tilt_min + "…" + h.tilt_max + "°";
       const px = (p) => (50 + (Number(p) / h.pan_limit) * 50) + "%";        // positive pan = head right = dot right
       const py = (t) => (50 - ((Number(t) - (h.tilt_min + h.tilt_max) / 2) / ((h.tilt_max - h.tilt_min) / 2)) * 50) + "%";
       $("tgt").style.left = px(h.pan); $("tgt").style.top = py(h.tilt);
@@ -237,6 +270,8 @@ input[type=range] { width:100%; accent-color:var(--accent); }
     $("linkdot").className = "dot" + (ok ? "" : " bad");
     chip($("c-link"), ok ? "LINK " + age + " ms" : "LINK lost", ok ? "ok" : "bad");
     if (!ok && pressed.size) releaseAll();
+    linkOk = !!ok;
+    videoAttach(videoOn && linkOk);
   }, 250);
 })();
 </script>

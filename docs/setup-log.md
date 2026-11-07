@@ -274,3 +274,27 @@ Cells in, Jetson booted on rover power (fan on; R36.5.2 kernel, MAXN_SUPER, abou
 - Speaker: a 1 s 880 Hz tone through `plughw:1,0` was audible from the rover (Paul confirmed). Speaker mixer raised 68% to 100%, camera microphone capture 50% to 100% (runtime `amixer` settings, not persisted).
 - First spoken English turns (`jetson/voice/talk.py`): rover microphone, Whisper in `rover-stt`, Gemma in `rover-llm` (needs `chat_template_kwargs.enable_thinking=false`, otherwise every token goes to `reasoning_content` and the answer is empty), then macOS `say` for the voice, then Kokoro on the Jetson (`jetson/tts/`). Pan-tilt control added to the console; a 10 degree pan from the API read back as 8.4 degrees and centre as 1.2 degrees.
 - Later: Kokoro voices auditioned (15 female, 6 male), then Supertonic 3 built and auditioned (F1-F5, M1-M5, Korean and English). Paul chose Supertonic M1 for both languages and named the robot Wall-E (briefly T-100). Kokoro container stopped, image kept. Speaker mixer is at 100% and files are normalised to -1 dBFS, so loudness is at the hardware limit.
+
+## 2026-11-07 — Console camera view, D436 on the rover, audio and WiFi incidents
+
+- Control server restarted with `--device /dev/video0`; the page now shows the 5 MP camera (details in
+  `docs/verify.md`). Page restyled the same day at Paul's request: video first, no explanatory text.
+- Audio8 TTS trial and removal: `docs/verify.md`.
+- Playing clips on the rover speaker failed three times with "Device or resource busy": the desktop
+  session's PulseAudio (pid 20368) grabs `pcmC1D0p` for a few seconds whenever `aplay` releases it. Not
+  fixed yet; a retry in `talk.py` is the planned mitigation.
+- The SSH tunnel from the Mac dropped twice ("Connection reset by peer" at about 03:09 UTC, "server not
+  responding" at about 10:40 EST) while the Jetson stayed up; the home 2.4 GHz WiFi link, not the Jetson.
+  Jetson WiFi power saving not yet checked.
+- D436 plugged into the head with a spare long USB-C to USB-A cable: USB 3 confirmed; one unexplained
+  disconnect at 10:40:31 while the cable was handled, fine after re-seating. Cable ties are the plan for
+  the slack; a 0.5 m cable (StarTech USB31AC50CM) is the tidy replacement if Paul orders one.
+- Audio board microphone silence, cause found in Paul's assembly photos (IMG_9706/9714/9719, kept out
+  of the repository): the kit's audio driver board (SSS1629 USB codec, speaker header, fan header, USB
+  hub) sits under the Jetson carrier inside the chassis and has a **4-position DIP switch** with a legend
+  box "earphone MIC | MIC" below it. A 12 s recording while the room was audibly noisy gave a flat
+  RMS 5 / peak 48 on the board versus RMS 500-1,240 on the camera microphone, so no microphone is routed
+  to the codec at all: the switches are either all off or on the earphone side. Plan: with the rover
+  powered off, set the two switches under "MIC" to ON and the two under "earphone MIC" to OFF (if still
+  silent, try the other pair), then repeat the recording test. Deferred to the same tear-down as the
+  D436 bracket fix.

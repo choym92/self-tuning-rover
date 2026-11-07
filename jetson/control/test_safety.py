@@ -150,12 +150,27 @@ class ControllerTests(unittest.TestCase):
         self.assertFalse(ctl.snapshot()["clock_synced"])
 
 
+class CameraTests(unittest.TestCase):
+    def test_push_wait_and_stats(self):
+        cam = server.Camera()                       # no device: frames come from push()
+        self.assertFalse(cam.stats()["ok"])
+        self.assertEqual(cam.wait(0, timeout=0.01), (None, 0))
+        cam.push(b"\xff\xd8one")
+        self.assertEqual(cam.wait(0, timeout=0.01), (b"\xff\xd8one", 1))
+        self.assertEqual(cam.wait(1, timeout=0.01), (None, 1))
+        cam.push(b"\xff\xd8two")
+        self.assertEqual(cam.wait(0, timeout=0.01), (b"\xff\xd8two", 2))   # a slow client skips to the newest
+        st = cam.stats()
+        self.assertEqual((st["ok"], st["size"], st["fps"], st["clients"]), (True, "1280x720", 1.0, 0))
+
+
 class ApiTests(unittest.TestCase):
     def setUp(self):
         self.link = FakeLink()
+        self.cam = server.Camera()
         self.ctl = server.Controller(self.link, cap=80, allow_drive=False, synced=lambda: True)
         page = os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html")
-        self.httpd = server.ThreadingHTTPServer(("127.0.0.1", 0), server.make_handler(self.ctl, page))
+        self.httpd = server.ThreadingHTTPServer(("127.0.0.1", 0), server.make_handler(self.ctl, page, self.cam))
         self.httpd.daemon_threads = True
         threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
         self.base = "http://127.0.0.1:%d" % self.httpd.server_address[1]
@@ -202,6 +217,22 @@ class ApiTests(unittest.TestCase):
         code, body = self.call("POST", "/api/head", {"pan": 30, "tilt": 10})
         self.assertEqual((code, body["head"]["pan"], body["head"]["tilt"]), (200, 30.0, 10.0))
         self.assertEqual(self.call("GET", "/nope")[0], 404)
+
+    def test_video_endpoints(self):
+        self.assertEqual(self.call("GET", "/frame.jpg")[0], 503)
+        self.assertFalse(self.call("GET", "/api/state")[1]["camera"]["ok"])
+        self.cam.push(b"\xff\xd8abc")
+        with urllib.request.urlopen(self.base + "/frame.jpg", timeout=5) as r:
+            self.assertEqual((r.status, r.headers["Content-Type"], r.read()), (200, "image/jpeg", b"\xff\xd8abc"))
+        stream = urllib.request.urlopen(self.base + "/video.mjpg", timeout=5)
+        self.assertTrue(stream.headers["Content-Type"].startswith("multipart/x-mixed-replace"))
+        head = b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: 5\r\n\r\n"
+        self.assertEqual(stream.read(len(head) + 5 + 2), head + b"\xff\xd8abc\r\n")
+        self.assertEqual(self.call("GET", "/api/state")[1]["camera"]["clients"], 1)
+        self.cam.push(b"\xff\xd8defgh")
+        head = head.replace(b"Length: 5", b"Length: 7")
+        self.assertEqual(stream.read(len(head) + 7 + 2), head + b"\xff\xd8defgh\r\n")
+        stream.close()
 
 
 if __name__ == "__main__":

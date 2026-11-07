@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Rover control server, stage 1: hold-to-drive from a browser, with the safety rules on the Jetson.
+"""Rover control server, stage 2: hold-to-drive and the camera view from a browser, with the safety rules on the Jetson.
 
 The server is the only process that opens the ESP32 UART. It reads the T:1001 feedback
 stream, serves the console page and a small JSON API, and runs a 20 Hz control loop that
@@ -11,10 +11,11 @@ decides what the wheels get:
   otherwise                     -> T:11 with the browser's -1..1 request scaled by the PWM cap
 
 Drive commands are refused until the server is started with --allow-drive, so the telemetry
-side can be tested without any risk of motion. Python standard library only.
+side can be tested without any risk of motion. Python standard library, plus OpenCV (already in
+the JetPack container) to read the camera's native MJPEG frames for /video.mjpg without decoding.
 
 Run on the Jetson (see README.md):
-  docker run --rm --name rover-control --device /dev/ttyTHS1 -p 127.0.0.1:8091:8091 \
+  docker run --rm --name rover-control --device /dev/ttyTHS1 --device /dev/video0 -p 127.0.0.1:8091:8091 \
     -v /home/paulcho/control:/work:ro -v /run/systemd/timesync:/timesync:ro \
     nvcr.io/nvidia/l4t-jetpack:r36.4.0 python3 /work/server.py --port 8091
 """
@@ -41,6 +42,7 @@ TILT_MIN, TILT_MAX = -30, 60   # firmware allows -30..90; 60 keeps the head clea
 HEAD_SPD, HEAD_ACC = 40, 15    # T:133 speed/acceleration, moderate
 HEAD_MIN_INTERVAL = 0.1   # seconds between head commands
 SYNC_FILE = "/timesync/synchronized"   # systemd-timesyncd touches this after the first sync
+VIDEO_SIZE, VIDEO_FPS = (1280, 720), 20   # the 5 MP camera delivers this as MJPEG at 20 fps (verify.md)
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -254,20 +256,114 @@ class Controller:
             }
 
 
+class Camera:
+    """Hands out the camera's own JPEG frames (no decode, no re-encode) to any number of stream clients.
+
+    A reader thread keeps the newest frame; `wait(seq)` blocks a client until a frame newer than
+    `seq` exists, so slow clients simply skip frames. With device=None nothing is opened and
+    frames come from `push()` (unit tests)."""
+
+    def __init__(self, device=None, size=VIDEO_SIZE, fps=VIDEO_FPS):
+        self.device, self.size, self.fps_req = device, size, fps
+        self._cond = threading.Condition()
+        self._frame, self._seq, self._t = b"", 0, 0.0
+        self._times = deque()
+        self.ok, self.error, self.clients = False, None if device else "no camera", 0
+        if device:
+            threading.Thread(target=self._reader, daemon=True).start()
+
+    def _open(self):
+        import cv2   # Jetson container only
+        cap = cv2.VideoCapture(self.device, cv2.CAP_V4L2)
+        if not cap.isOpened():
+            return None
+        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.size[0])
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.size[1])
+        cap.set(cv2.CAP_PROP_FPS, self.fps_req)
+        cap.set(cv2.CAP_PROP_CONVERT_RGB, 0)
+        cap.set(cv2.CAP_PROP_FORMAT, -1)     # raw buffer: the JPEG exactly as the camera sent it
+        return cap
+
+    def _reader(self):
+        while True:
+            try:
+                cap = self._open()
+            except Exception as e:          # missing cv2, wrong device type
+                cap, self.error = None, str(e)
+            if cap is None:
+                self.ok, self.error = False, self.error or "cannot open %s" % self.device
+                time.sleep(2.0)
+                continue
+            self.error = None
+            while True:
+                ok, frame = cap.read()
+                if not ok or frame is None:
+                    break
+                data = frame.tobytes()
+                if data[:2] == b"\xff\xd8":
+                    self.push(data)
+            cap.release()
+            self.ok, self.error = False, "read failed; reopening"
+            time.sleep(1.0)
+
+    def push(self, data):
+        now = time.monotonic()
+        with self._cond:
+            self._frame, self._seq, self._t = data, self._seq + 1, now
+            self._times.append(now)
+            while self._times and now - self._times[0] > 2.0:
+                self._times.popleft()
+            self.ok, self.error = True, None
+            self._cond.notify_all()
+
+    def wait(self, seq, timeout=2.0):
+        """(frame, seq) of the first frame newer than `seq`, or (None, seq) after `timeout`."""
+        with self._cond:
+            if self._seq <= seq:
+                self._cond.wait(timeout)
+            return (self._frame, self._seq) if self._seq > seq else (None, seq)
+
+    def latest(self):
+        with self._cond:
+            return self._frame
+
+    def stats(self):
+        with self._cond:
+            return {"ok": self.ok, "fps": round(len(self._times) / 2.0, 1), "size": "%dx%d" % tuple(self.size),
+                    "age_s": None if not self._t else round(time.monotonic() - self._t, 2),
+                    "clients": self.clients, "error": self.error}
+
+
 def control_loop(controller):
     while True:
         controller.tick()
         time.sleep(TICK)
 
 
-def make_handler(controller, page_path):
+def make_handler(controller, page_path, camera=None):
+    camera = camera or Camera()
+
+    def state():
+        s = controller.snapshot()
+        s["camera"] = camera.stats()
+        return s
+
     class Handler(BaseHTTPRequestHandler):
-        server_version = "rover-control/0.1"
+        server_version = "rover-control/0.2"
 
         def log_message(self, fmt, *args):
-            if self.path.startswith(("/api/events", "/api/drive", "/api/head")):
+            if self.path.startswith(("/api/events", "/api/drive", "/api/head", "/frame.jpg")):
                 return
             sys.stderr.write("%s %s\n" % (self.address_string(), fmt % args))
+
+        def _bytes(self, code, ctype, body):
+            self.send_response(code)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(body)
 
         def _json(self, code, obj):
             body = json.dumps(obj).encode()
@@ -298,7 +394,7 @@ def make_handler(controller, page_path):
                 self.end_headers()
                 self.wfile.write(body)
             elif self.path.startswith("/api/state"):
-                self._json(200, controller.snapshot())
+                self._json(200, state())
             elif self.path.startswith("/api/events"):
                 self.send_response(200)
                 self.send_header("Content-Type", "text/event-stream")
@@ -306,11 +402,37 @@ def make_handler(controller, page_path):
                 self.end_headers()
                 try:
                     while True:
-                        self.wfile.write(("data: %s\n\n" % json.dumps(controller.snapshot())).encode())
+                        self.wfile.write(("data: %s\n\n" % json.dumps(state())).encode())
                         self.wfile.flush()
                         time.sleep(0.2)
                 except (BrokenPipeError, ConnectionResetError):
                     return
+            elif self.path.startswith("/frame.jpg"):
+                frame = camera.latest()
+                if frame:
+                    self._bytes(200, "image/jpeg", frame)
+                else:
+                    self._json(503, {"error": camera.error or "no frame yet"})
+            elif self.path.startswith("/video.mjpg"):
+                # Motion JPEG: each camera frame is one multipart body part; <img src="/video.mjpg"> plays it.
+                self.send_response(200)
+                self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                camera.clients += 1
+                seq = 0
+                try:
+                    while True:
+                        frame, seq = camera.wait(seq)
+                        if frame is None:       # camera reopening: keep the connection, send nothing
+                            continue
+                        self.wfile.write(b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: %d\r\n\r\n" % len(frame))
+                        self.wfile.write(frame + b"\r\n")
+                        self.wfile.flush()
+                except (BrokenPipeError, ConnectionResetError):
+                    return
+                finally:
+                    camera.clients -= 1
             else:
                 self._json(404, {"error": "not found"})
 
@@ -338,9 +460,9 @@ def make_handler(controller, page_path):
     return Handler
 
 
-def serve(controller, host, port, page_path):
+def serve(controller, host, port, page_path, camera=None):
     threading.Thread(target=control_loop, args=(controller,), daemon=True).start()
-    httpd = ThreadingHTTPServer((host, port), make_handler(controller, page_path))
+    httpd = ThreadingHTTPServer((host, port), make_handler(controller, page_path, camera))
     httpd.daemon_threads = True
     return httpd
 
@@ -352,14 +474,16 @@ def main():
     ap.add_argument("--port", type=int, default=8091)
     ap.add_argument("--cap", type=int, default=CAP_DEFAULT, help="PWM cap, 0-%d" % CAP_MAX)
     ap.add_argument("--allow-drive", action="store_true", help="accept drive commands (off: telemetry only)")
+    ap.add_argument("--camera", default="/dev/video0", help="V4L2 device for /video.mjpg; 'none' to run without video")
     args = ap.parse_args()
     if not 0 <= args.cap <= CAP_MAX:
         sys.exit("--cap must be 0-%d" % CAP_MAX)
     link = SerialLink(args.serial)
     controller = Controller(link, cap=args.cap, allow_drive=args.allow_drive)
-    httpd = serve(controller, args.host, args.port, os.path.join(HERE, "index.html"))
-    print("rover-control on %s:%d, serial %s, cap %d, drive %s" % (
-        args.host, args.port, args.serial, args.cap, "ALLOWED" if args.allow_drive else "disabled"), flush=True)
+    camera = Camera(None if args.camera == "none" else args.camera)
+    httpd = serve(controller, args.host, args.port, os.path.join(HERE, "index.html"), camera)
+    print("rover-control on %s:%d, serial %s, cap %d, drive %s, camera %s" % (
+        args.host, args.port, args.serial, args.cap, "ALLOWED" if args.allow_drive else "disabled", args.camera), flush=True)
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
