@@ -153,7 +153,7 @@ class ControllerTests(unittest.TestCase):
         link.fb["pan"], link.fb["tilt"] = -1.1, 0.3  # the servo stopped short, as seen on 2026-11-07
         clock.advance(0.3); ctl.tick()
         self.assertEqual(len(link.sent), 1)          # too early to trust the reading
-        clock.advance(server.HEAD_SETTLE); ctl.tick()
+        clock.advance(server.HEAD_SETTLE + 0.01); ctl.tick()
         self.assertEqual((link.sent[-1]["X"], link.sent[-1]["Y"]), (1.1, 0.0))   # nudge by the error; tilt within tolerance
         link.fb["pan"] = 0.1                         # now close enough
         clock.advance(server.HEAD_SETTLE + 0.01); ctl.tick()
@@ -165,6 +165,18 @@ class ControllerTests(unittest.TestCase):
             link.fb["pan"] = 20.0
             clock.advance(server.HEAD_SETTLE + 0.01); ctl.tick()
         self.assertEqual(len(link.sent), 3 + server.HEAD_SETTLE_TRIES)
+
+    def test_head_settle_waits_for_the_servo_to_stop(self):
+        ctl, link, clock = make()
+        ctl.move_head(pan=40); ctl.tick()            # command sent
+        for p in (5.0, 15.0, 25.0, 35.0):            # readings still changing: the head is travelling
+            link.fb["pan"] = p; clock.advance(0.3); ctl.tick()
+            self.assertEqual(len(link.sent), 1)
+        link.fb["pan"] = 38.1                        # stopped short
+        clock.advance(0.3); ctl.tick()
+        self.assertEqual(len(link.sent), 1)          # changed again: not trusted yet
+        clock.advance(server.HEAD_SETTLE + 0.01); ctl.tick()
+        self.assertEqual(link.sent[-1]["X"], 41.9)   # nudge by the error once the readings held still
 
     def test_head_trim_shifts_commands_and_readings(self):
         link = FakeLink(); clock = FakeClock()

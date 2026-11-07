@@ -520,3 +520,14 @@ angle 0.6 s after the command, nudge by the error if it exceeds 0.3 deg, at most
 Center from +15 deg landed at +0.2/+0.1, from -15 deg at -0.1/+0.1; 15/10 deg landed at 14.8/9.8,
 -15 deg at -15.0. A calibration trim (`--pan-trim`, `--tilt-trim`) is in place but still 0; the true
 forward direction has not been measured yet (needs the D436 and a target).
+
+Later the same day, a 40 deg pan exposed a flaw: the settle step fired 0.6 s after the command while
+the head was still travelling (a 40 deg move takes about 1.1 s), spent its three nudges on mid-travel
+readings and left the head at -1.9 deg. The server now also waits until the reported angles have not
+changed for 0.6 s. Re-run after the fix: 0 -> 40 -> 0 ended at +0.1/-0.3 deg.
+
+Head speed (same test, mid-travel speed from the 19.5 Hz feedback, through the SSH tunnel):
+`SPD 40` gave 36-38 deg/s; `SPD 80, ACC 30` (the new defaults, also `--head-spd/--head-acc`) gave
+56 deg/s outbound. Waveshare documents `SPD 0`/`ACC 0` as "fastest"; the unit of other values is not
+documented. The page's held-arrow nudge went from 3 to 5 deg per 100 ms (30 -> 50 deg/s) so that the
+command rate no longer caps the servo.

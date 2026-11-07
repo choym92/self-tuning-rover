@@ -41,10 +41,10 @@ LOW_V_WARN = 10.5         # volts
 LOW_V_STOP = 9.6
 PAN_LIMIT = 120           # degrees each way; keeps the D436 USB cable from wrapping
 TILT_MIN, TILT_MAX = -30, 60   # firmware allows -30..90; 60 keeps the head clear of the body
-HEAD_SPD, HEAD_ACC = 40, 15    # T:133 speed/acceleration, moderate
+HEAD_SPD, HEAD_ACC = 80, 30    # T:133 speed/acceleration defaults; 0 = fastest (Waveshare); SPD 40 measured about 37 deg/s
 HEAD_MIN_INTERVAL = 0.1   # seconds between head commands
 HEAD_TOL = 0.3            # degrees; the ST3215 reports within about this, so closer is not worth a command
-HEAD_SETTLE = 0.6         # seconds after a head command before its reported position is trusted
+HEAD_SETTLE = 0.6         # seconds of unchanged readings (and after the command) before a reported position is trusted
 HEAD_SETTLE_TRIES = 3     # corrective nudges per target (gear play leaves 1 degree either way otherwise)
 SYNC_FILE = "/timesync/synchronized"   # systemd-timesyncd touches this after the first sync
 VIDEO_SIZE, VIDEO_FPS = (1280, 720), 20   # the 5 MP camera delivers this as MJPEG at 20 fps (verify.md)
@@ -124,7 +124,8 @@ class SerialLink:
 class Controller:
     """Turns browser requests into wheel commands under the safety rules."""
 
-    def __init__(self, link, cap=CAP_DEFAULT, allow_drive=False, clock=time.monotonic, synced=None, trim=(0.0, 0.0)):
+    def __init__(self, link, cap=CAP_DEFAULT, allow_drive=False, clock=time.monotonic, synced=None, trim=(0.0, 0.0),
+                 head_spd=HEAD_SPD, head_acc=HEAD_ACC):
         self.link = link
         self.cap = cap
         self.trim = (float(trim[0]), float(trim[1]))   # servo reading of the true forward direction (calibration)
@@ -143,6 +144,9 @@ class Controller:
         self.head_tries = HEAD_SETTLE_TRIES
         self.head_dirty = False
         self.head_sent_t = -1e9
+        self.head_fb = None             # last reported (pan, tilt) that differed from the one before
+        self.head_moved_t = -1e9        # when it last changed: the servos are still travelling until this is old
+        self.head_spd, self.head_acc = head_spd, head_acc
 
     def voltage(self):
         v = self.link.latest().get("v")
@@ -212,14 +216,24 @@ class Controller:
     def _send_head(self):
         x = max(-PAN_LIMIT, min(PAN_LIMIT, self.head_cmd[0]))
         y = max(TILT_MIN, min(TILT_MAX, self.head_cmd[1]))
-        self.link.send({"T": 133, "X": round(x, 1), "Y": round(y, 1), "SPD": HEAD_SPD, "ACC": HEAD_ACC})
+        self.link.send({"T": 133, "X": round(x, 1), "Y": round(y, 1), "SPD": self.head_spd, "ACC": self.head_acc})
         self.head_dirty = False
         self.head_sent_t = self.clock()
 
+    def _track_head(self, now):
+        fb = self.link.latest()
+        if fb.get("pan") is None or fb.get("tilt") is None:
+            return
+        cur = (float(fb["pan"]), float(fb["tilt"]))
+        if self.head_fb is None or abs(cur[0] - self.head_fb[0]) > HEAD_TOL or abs(cur[1] - self.head_fb[1]) > HEAD_TOL:
+            self.head_fb, self.head_moved_t = cur, now
+
     def _settle_head(self, now):
         """After the servos stop, compare the reported angles with the target and nudge once more
-        (gear play leaves about a degree either way). Gives up after HEAD_SETTLE_TRIES."""
-        if self.head_tries >= HEAD_SETTLE_TRIES or now - self.head_sent_t < HEAD_SETTLE:
+        (gear play leaves about a degree either way). Gives up after HEAD_SETTLE_TRIES. Waits until the
+        readings have stopped changing: a 40 degree pan takes over a second, and nudging mid-travel
+        (seen 2026-11-07) spends the tries on stale readings and leaves the head 2 degrees off."""
+        if self.head_tries >= HEAD_SETTLE_TRIES or now - self.head_sent_t < HEAD_SETTLE or now - self.head_moved_t < HEAD_SETTLE:
             return
         fb = self.link.latest()
         if fb.get("pan") is None or fb.get("tilt") is None:
@@ -246,6 +260,7 @@ class Controller:
         """One control step. Called every TICK by the loop thread."""
         with self._lock:
             now = self.clock()
+            self._track_head(now)
             if self.head_dirty and not self.estop and now - self.head_sent_t >= HEAD_MIN_INTERVAL:
                 self._send_head()
             elif not self.head_dirty and not self.estop:
@@ -583,11 +598,14 @@ def main():
     ap.add_argument("--eyes", default="http://127.0.0.1:8094", help="eyes service (D436) proxied under /d436/; 'none' to disable")
     ap.add_argument("--pan-trim", type=float, default=0.0, help="servo pan reading of the true forward direction (calibration)")
     ap.add_argument("--tilt-trim", type=float, default=0.0, help="servo tilt reading of level forward (calibration)")
+    ap.add_argument("--head-spd", type=int, default=HEAD_SPD, help="T:133 SPD for the pan-tilt servos; 0 = fastest")
+    ap.add_argument("--head-acc", type=int, default=HEAD_ACC, help="T:133 ACC for the pan-tilt servos; 0 = fastest")
     args = ap.parse_args()
     if not 0 <= args.cap <= CAP_MAX:
         sys.exit("--cap must be 0-%d" % CAP_MAX)
     link = SerialLink(args.serial)
-    controller = Controller(link, cap=args.cap, allow_drive=args.allow_drive, trim=(args.pan_trim, args.tilt_trim))
+    controller = Controller(link, cap=args.cap, allow_drive=args.allow_drive, trim=(args.pan_trim, args.tilt_trim),
+                            head_spd=args.head_spd, head_acc=args.head_acc)
     camera = Camera(None if args.camera == "none" else args.camera)
     eyes = EyesLink(None if args.eyes == "none" else args.eyes)
     httpd = serve(controller, args.host, args.port, os.path.join(HERE, "index.html"), camera, eyes)

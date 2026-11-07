@@ -313,3 +313,13 @@ Cells in, Jetson booted on rover power (fan on; R36.5.2 kernel, MAXN_SUPER, abou
   (the copy happened during the WiFi drops). Fixed by copying the page again; the torn copy is kept
   at `/tmp/index.html.torn-*` on the Jetson for this boot only. Check after every deploy:
   `curl -s http://127.0.0.1:8091/ | diff - jetson/control/index.html` must print nothing.
+- Head: Paul found left/right slow. Measured, then raised `HEAD_SPD/HEAD_ACC` 40/15 -> 80/30 and the
+  held-arrow nudge 3 -> 5 deg per tick; the settle step now waits for the readings to stop changing
+  (a 40 deg move had been ending 1.9 deg off). Numbers in `docs/verify.md`. `rover-control` restarted
+  with the new `server.py` at 14:13 EST, back in about 1 s.
+- Console look reworked at Paul's request ("chips look dated, wordmark bigger"): two agents drafted
+  an "instrument rail" and a "tonal pills" variant on scratch copies with the script block untouched;
+  Paul chose the rail. Checked locally with fake data in e-stop, D436 standby, depth+small picture,
+  link-lost, 1100 px and 850 px widths, then copied to the rover (page only, no restart). The target
+  ring in the head pad grew to 20 px so the 12 px dot sits visibly centred (the old 0.5 px gap looked
+  lopsided although the centres were 0.1 px apart).
