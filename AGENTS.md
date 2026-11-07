@@ -27,6 +27,7 @@ live device state from it: run its read-only checks when live state matters.
 | Voice work | `jetson/voice/README.md`, `docs/voice-orchestration.md` |
 | LLM work | `jetson/llm/README.md`; results in `docs/verify.md` |
 | Parts or purchase status | `docs/build-spec.md` |
+| Physical layout, device names or a hardware quirk | `docs/rover-hardware.md` |
 | Historical research only | a specifically relevant file under `docs/reference/` |
 
 Do not read every document by default. `docs/reference/` is dated evidence, not
@@ -37,7 +38,7 @@ current truth. Search headings first and open only the relevant section.
 | Item | Value |
 |---|---|
 | Jetson | Orin Nano Super Developer Kit 8 GB; hostname `paul-cho-jetson` |
-| SSH | `ssh paulcho@192.168.1.234` from the home LAN; key login is configured |
+| SSH | `ssh paulcho@192.168.1.238` from the home LAN (DHCP; current address in `docs/STATUS.md`); key login is configured |
 | Current OS/software state | `docs/STATUS.md`; verify live before acting |
 | sudo | Paul enters it himself. Never type or ask for his password |
 | Docker | NVIDIA runtime; group membership may be temporary—check `docs/STATUS.md` |

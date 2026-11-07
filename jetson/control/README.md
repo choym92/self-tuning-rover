@@ -10,8 +10,8 @@ boards 5 and 6) and `docs/decisions.md`.
 
 | File | Purpose |
 |---|---|
-| `server.py` | UART reader, 20 Hz control loop, camera reader, JSON API and MJPEG stream, serves the page |
-| `index.html` | The console page: camera view, WASD hold-to-drive, emergency stop, pan-tilt, telemetry |
+| `server.py` | UART reader, 20 Hz control loop, camera reader, JSON API, MJPEG stream, `/d436/` proxy to the eyes service, serves the page |
+| `index.html` | The console page: big picture + small picture from three sources (5 MP, D436 colour, D436 depth), WASD hold-to-drive, emergency stop, pan-tilt, telemetry |
 | `test_safety.py` | Unit tests for the controller and the API with a fake UART |
 
 ## Safety rules (server side)
@@ -64,7 +64,10 @@ ssh -N -L 8091:127.0.0.1:8091 paulcho@192.168.1.238
 
 Then open http://localhost:8091. Keys: W/A/S/D while held, Space = emergency stop, arrow keys
 move the head. The video panel plays `/video.mjpg` while the telemetry link is up and can be
-switched off on the page to save bandwidth (about 1.4 MB/s at 1280x720, 20 fps).
+switched off on the page to save bandwidth (about 1.4 MB/s at 1280x720, 20 fps). The source
+buttons on the picture choose what fills the big view; the small view shows the next source at
+5 fps and swaps on click. D436 views need the eyes service (`jetson/eyes/`), started separately;
+`--eyes none` disables the proxy.
 
 ## API
 
@@ -79,3 +82,4 @@ switched off on the page to save bandwidth (about 1.4 MB/s at 1280x720, 20 fps).
 | `POST /api/head {"pan","tilt"} or {"dpan","dtilt"}` | absolute or relative head move, clamped; 403 under emergency stop |
 | `GET /video.mjpg` | Motion JPEG stream of the camera's own frames (multipart/x-mixed-replace) |
 | `GET /frame.jpg` | the newest single frame; 503 until the camera delivers |
+| `GET /d436/...` | pass-through to the eyes service (`jetson/eyes/README.md`): `color.mjpg`, `depth.mjpg`, `color.jpg`, `depth.jpg`, `api/state`; 503 when it is down |

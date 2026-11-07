@@ -10,7 +10,7 @@ processes and hardware instead of assuming this snapshot is still running.
 
 - VERIFIED: Jetson Orin Nano Super 8 GB, JetPack 6.2.3 / L4T R36.5.2, kernel
   5.15.199-tegra, CUDA 12.6, root on the 512 GB NVMe, MAXN_SUPER.
-- VERIFIED: SSH from the Mac at `paulcho@192.168.1.234` with key login.
+- VERIFIED: SSH from the Mac at `paulcho@192.168.1.238` (WiFi, DHCP; was .234 on the desk) with key login.
 - DECIDED: experimental GPU workloads remain containerized; models live under
   `/home/paulcho/models`, builds and logs under `/home/paulcho/llm`.
 - TEMPORARY: `paulcho` was added to the Docker group for the 2026-09-25 test
@@ -20,7 +20,7 @@ processes and hardware instead of assuming this snapshot is still running.
 Read-only live checks:
 
 ```sh
-ssh paulcho@192.168.1.234 'hostname; uname -r; free -m; docker ps'
+ssh paulcho@192.168.1.238 'hostname; uname -r; free -m; docker ps'
 lsof -nP -iTCP:18090 -sTCP:LISTEN
 ```
 
@@ -64,7 +64,7 @@ Next steps:
 
 ## Vision (2026-10-03)
 
-- DECIDED: detector YOLO26s TensorRT FP16; owner recognition SCRFD + ArcFace R50 with
+- DECIDED: detector RF-DETR-Nano TensorRT FP16 (YOLO26s superseded the same day, `docs/decisions.md`); owner recognition SCRFD + ArcFace R50 with
   the guided gallery `~/yolo/owner/paul_guided.npz` (34 shots). Evidence and costs in
   `docs/verify.md`; choices in `docs/decisions.md`.
 - PLANNED by Paul (later): time-sharing between vision and the LLM on the 8 GB board
@@ -92,7 +92,7 @@ Next steps:
 - Control console (`jetson/control/`): keyboard driving, emergency stop and pan-tilt work from the
   Mac page; one unexplained lingering drive request on 2026-11-06 (`docs/setup-log.md`), so a
   continuous-drive time limit is the next safety item. Camera 20 fps at every mode; the audio
-  board microphone reads silence (cause not found; the camera microphone is used instead).
+  board microphone reads silence (cause: its DIP switch, see below; the camera microphone is used instead).
 - Voice: the robot is called Wall-E. `jetson/voice/talk.py` runs one spoken turn in English or
   Korean (Whisper, Gemma with thinking off, Supertonic 3 voice M1 in `jetson/tts/supertonic/`).
   Kokoro is installed but off. Whisper is still English-only; Paul speaking to the robot is
@@ -103,9 +103,9 @@ Next steps:
 - Pending: UART soak under vision load, memory plan once vision returns
   (Gemma + Whisper + Supertonic use about 5.6 GB; 2.0 GB free).
 - Final microphone: not purchased. The Waveshare audio board's microphones are switched off by a
-  4-position DIP switch ("earphone MIC | MIC") under the Jetson carrier (`docs/setup-log.md`, 2026-11-07);
-  flip it at the next tear-down. The camera microphone is used meanwhile; the fallback is a Seeed
-  reSpeaker XVF3800 USB four-mic array.
+  4-position DIP switch ("earphone MIC | MIC") under the Jetson carrier (`docs/setup-log.md`, 2026-11-07).
+  Paul's decision: leave it; flip it only if voice recognition through the camera microphone turns out
+  to be inadequate. The fallback after that is a Seeed reSpeaker XVF3800 USB four-mic array.
 
 ## Documentation health
 

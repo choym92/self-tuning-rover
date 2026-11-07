@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Rover control server, stage 2: hold-to-drive and the camera view from a browser, with the safety rules on the Jetson.
+"""Rover control server, stage 2: hold-to-drive and the camera views from a browser, with the safety rules on the Jetson.
 
 The server is the only process that opens the ESP32 UART. It reads the T:1001 feedback
 stream, serves the console page and a small JSON API, and runs a 20 Hz control loop that
@@ -27,6 +27,7 @@ import sys
 import termios
 import threading
 import time
+import urllib.request
 from collections import deque
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -335,18 +336,43 @@ class Camera:
                     "clients": self.clients, "error": self.error}
 
 
+class EyesLink:
+    """Talks to the eyes service (the D436 owner, jetson/eyes/): polls its state once a second and
+    opens its streams for the /d436/ proxy, so the page needs one origin and one tunnel."""
+
+    def __init__(self, base=None):
+        self.base = base.rstrip("/") if base else None
+        self.state = {"connected": False, "error": "eyes service not configured" if not base else "not reached yet"}
+        if self.base:
+            threading.Thread(target=self._poll, daemon=True).start()
+
+    def _poll(self):
+        while True:
+            try:
+                with urllib.request.urlopen(self.base + "/api/state", timeout=1.0) as r:
+                    self.state = json.loads(r.read())
+            except Exception:
+                self.state = {"connected": False, "error": "eyes service unreachable"}
+            time.sleep(1.0)
+
+    def open(self, path):
+        return urllib.request.urlopen(self.base + path, timeout=5)
+
+
 def control_loop(controller):
     while True:
         controller.tick()
         time.sleep(TICK)
 
 
-def make_handler(controller, page_path, camera=None):
+def make_handler(controller, page_path, camera=None, eyes=None):
     camera = camera or Camera()
+    eyes = eyes or EyesLink()
 
     def state():
         s = controller.snapshot()
         s["camera"] = camera.stats()
+        s["d436"] = eyes.state
         return s
 
     class Handler(BaseHTTPRequestHandler):
@@ -407,6 +433,33 @@ def make_handler(controller, page_path, camera=None):
                         time.sleep(0.2)
                 except (BrokenPipeError, ConnectionResetError):
                     return
+            elif self.path.startswith("/d436/"):
+                # Pass-through to the eyes service; streams are copied chunk by chunk as they arrive.
+                if not eyes.base:
+                    self._json(503, {"error": "eyes service not configured"})
+                    return
+                try:
+                    up = eyes.open(self.path[len("/d436"):])
+                except Exception:
+                    self._json(503, {"error": "eyes service unreachable"})
+                    return
+                try:
+                    self.send_response(up.status)
+                    for h in ("Content-Type", "Content-Length"):
+                        if up.headers.get(h):
+                            self.send_header(h, up.headers[h])
+                    self.send_header("Cache-Control", "no-store")
+                    self.end_headers()
+                    while True:
+                        chunk = up.read1(65536)
+                        if not chunk:
+                            break
+                        self.wfile.write(chunk)
+                        self.wfile.flush()
+                except (BrokenPipeError, ConnectionResetError):
+                    return
+                finally:
+                    up.close()
             elif self.path.startswith("/frame.jpg"):
                 frame = camera.latest()
                 if frame:
@@ -460,9 +513,9 @@ def make_handler(controller, page_path, camera=None):
     return Handler
 
 
-def serve(controller, host, port, page_path, camera=None):
+def serve(controller, host, port, page_path, camera=None, eyes=None):
     threading.Thread(target=control_loop, args=(controller,), daemon=True).start()
-    httpd = ThreadingHTTPServer((host, port), make_handler(controller, page_path, camera))
+    httpd = ThreadingHTTPServer((host, port), make_handler(controller, page_path, camera, eyes))
     httpd.daemon_threads = True
     return httpd
 
@@ -475,15 +528,17 @@ def main():
     ap.add_argument("--cap", type=int, default=CAP_DEFAULT, help="PWM cap, 0-%d" % CAP_MAX)
     ap.add_argument("--allow-drive", action="store_true", help="accept drive commands (off: telemetry only)")
     ap.add_argument("--camera", default="/dev/video0", help="V4L2 device for /video.mjpg; 'none' to run without video")
+    ap.add_argument("--eyes", default="http://127.0.0.1:8094", help="eyes service (D436) proxied under /d436/; 'none' to disable")
     args = ap.parse_args()
     if not 0 <= args.cap <= CAP_MAX:
         sys.exit("--cap must be 0-%d" % CAP_MAX)
     link = SerialLink(args.serial)
     controller = Controller(link, cap=args.cap, allow_drive=args.allow_drive)
     camera = Camera(None if args.camera == "none" else args.camera)
-    httpd = serve(controller, args.host, args.port, os.path.join(HERE, "index.html"), camera)
-    print("rover-control on %s:%d, serial %s, cap %d, drive %s, camera %s" % (
-        args.host, args.port, args.serial, args.cap, "ALLOWED" if args.allow_drive else "disabled", args.camera), flush=True)
+    eyes = EyesLink(None if args.eyes == "none" else args.eyes)
+    httpd = serve(controller, args.host, args.port, os.path.join(HERE, "index.html"), camera, eyes)
+    print("rover-control on %s:%d, serial %s, cap %d, drive %s, camera %s, eyes %s" % (
+        args.host, args.port, args.serial, args.cap, "ALLOWED" if args.allow_drive else "disabled", args.camera, args.eyes), flush=True)
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

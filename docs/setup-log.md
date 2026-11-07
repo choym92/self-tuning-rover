@@ -296,5 +296,5 @@ Cells in, Jetson booted on rover power (fan on; R36.5.2 kernel, MAXN_SUPER, abou
   RMS 5 / peak 48 on the board versus RMS 500-1,240 on the camera microphone, so no microphone is routed
   to the codec at all: the switches are either all off or on the earphone side. Plan: with the rover
   powered off, set the two switches under "MIC" to ON and the two under "earphone MIC" to OFF (if still
-  silent, try the other pair), then repeat the recording test. Deferred to the same tear-down as the
-  D436 bracket fix.
+  silent, try the other pair), then repeat the recording test. Paul: only if the camera microphone
+  proves inadequate for voice recognition; otherwise leave it.

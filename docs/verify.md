@@ -480,3 +480,22 @@ succeeded on retry. Earlier spoken turns on 2026-11-06 did not hit this.
   depth image are blocked, and the bracket reads as a permanent 0.2-0.5 m "obstacle" in depth. Fix deferred
   by Paul (move the D436 forward 1-2 cm or add a spacer under it); a software mask is the fallback. The
   5 MP frame does not show the D436's underside.
+
+## Eyes service: D436 colour and depth in the console page (2026-11-07, Jetson on the rover)
+
+`jetson/eyes/eyes_server.py` in the stock `l4t-jetpack:r36.4.0` container (no image build; the
+RSUSB librealsense build mounted, `--network container:rover-control`), proxied by the control server
+under `/d436/`. Start-up: control server answering 2 s after `docker run`, D436 streaming 3 s after the
+eyes container started. D436 848x480 colour + depth at 30.0 fps, depth valid 70%, centre 1.16 m (head
+near centre, hallway scene); colour JPEG q80 about 36 kB, depth picture about 36 kB.
+
+| State | rover-eyes RSS | rover-eyes CPU (one core = 100%) | rover-control RSS / CPU |
+|---|---|---|---|
+| no viewer (frames read, stats every 10th frame) | 75 MiB | 13% | 29 MiB / 2% |
+| page showing depth at 30 fps + 5 MP small picture | 82 MiB | **59%** | 30 MiB / 4% |
+
+System memory with Gemma, Whisper, Supertonic, control and eyes: 5.6 GB used, 1.8 GB available;
+CPU 47.8 C. The depth colouring (float conversion + colour map at 30 fps) is most of the 59%;
+integer mapping and a lower default depth rate are the planned reductions. The tilt bracket shows
+as the black lower-right region in both D436 views. The page's three-source selector and the small
+picture were checked in the built-in browser; 17 unit tests pass on the Mac (15 control, 2 eyes).

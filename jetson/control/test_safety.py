@@ -164,13 +164,31 @@ class CameraTests(unittest.TestCase):
         self.assertEqual((st["ok"], st["size"], st["fps"], st["clients"]), (True, "1280x720", 1.0, 0))
 
 
+class FakeEyesHandler(server.BaseHTTPRequestHandler):
+    """Stands in for the eyes service: a state document and one picture."""
+    def log_message(self, *a):
+        pass
+
+    def do_GET(self):
+        body, ctype = (b'{"connected": true, "fps": 29.5, "center_m": 2.47}', "application/json") if self.path == "/api/state" \
+            else (b"\xff\xd8eyes", "image/jpeg") if self.path.startswith("/color.jpg") else (b"{}", "application/json")
+        self.send_response(200 if ctype else 404)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+
 class ApiTests(unittest.TestCase):
     def setUp(self):
         self.link = FakeLink()
         self.cam = server.Camera()
+        self.fake_eyes = server.ThreadingHTTPServer(("127.0.0.1", 0), FakeEyesHandler)
+        threading.Thread(target=self.fake_eyes.serve_forever, daemon=True).start()
+        self.eyes = server.EyesLink("http://127.0.0.1:%d" % self.fake_eyes.server_address[1])
         self.ctl = server.Controller(self.link, cap=80, allow_drive=False, synced=lambda: True)
         page = os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html")
-        self.httpd = server.ThreadingHTTPServer(("127.0.0.1", 0), server.make_handler(self.ctl, page, self.cam))
+        self.httpd = server.ThreadingHTTPServer(("127.0.0.1", 0), server.make_handler(self.ctl, page, self.cam, self.eyes))
         self.httpd.daemon_threads = True
         threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
         self.base = "http://127.0.0.1:%d" % self.httpd.server_address[1]
@@ -178,6 +196,8 @@ class ApiTests(unittest.TestCase):
     def tearDown(self):
         self.httpd.shutdown()
         self.httpd.server_close()
+        self.fake_eyes.shutdown()
+        self.fake_eyes.server_close()
 
     def call(self, method, path, body=None):
         data = None if body is None else json.dumps(body).encode()
@@ -233,6 +253,27 @@ class ApiTests(unittest.TestCase):
         head = head.replace(b"Length: 5", b"Length: 7")
         self.assertEqual(stream.read(len(head) + 7 + 2), head + b"\xff\xd8defgh\r\n")
         stream.close()
+
+    def test_d436_proxy_and_state(self):
+        import time
+        for _ in range(40):                                   # the poller's first read lands within a second
+            if self.eyes.state.get("connected"):
+                break
+            time.sleep(0.05)
+        self.assertEqual(self.call("GET", "/api/state")[1]["d436"]["center_m"], 2.47)
+        with urllib.request.urlopen(self.base + "/d436/color.jpg", timeout=5) as r:
+            self.assertEqual((r.status, r.headers["Content-Type"], r.read()), (200, "image/jpeg", b"\xff\xd8eyes"))
+        dead = server.make_handler(self.ctl, os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html"),
+                                   self.cam, server.EyesLink("http://127.0.0.1:1"))
+        httpd = server.ThreadingHTTPServer(("127.0.0.1", 0), dead)
+        threading.Thread(target=httpd.serve_forever, daemon=True).start()
+        try:
+            req = urllib.request.Request("http://127.0.0.1:%d/d436/color.jpg" % httpd.server_address[1])
+            with self.assertRaises(urllib.error.HTTPError) as cm:
+                urllib.request.urlopen(req, timeout=5)
+            self.assertEqual(cm.exception.code, 503)
+        finally:
+            httpd.shutdown(); httpd.server_close()
 
 
 if __name__ == "__main__":

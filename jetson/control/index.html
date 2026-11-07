@@ -53,6 +53,12 @@ input[type=range] { width:100%; accent-color:var(--accent); margin:0; }
 .ov button { min-height:28px; padding:0 10px; font-size:12px; background:rgba(14,20,27,.72); }
 .nocam { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--muted); background:#0b1016; }
 .nocam[hidden] { display:none; }
+.seg { display:flex; border:1px solid var(--line); border-radius:6px; overflow:hidden; pointer-events:auto; }
+.seg button { min-height:28px; padding:0 10px; font-size:12px; border:0; border-radius:0; background:rgba(14,20,27,.72); color:#c9d4df; }
+.seg button + button { border-left:1px solid var(--line); }
+.seg button.on { background:var(--accent); color:#0e141b; }
+.vid img.pip { position:absolute; right:10px; bottom:46px; width:28%; height:auto; aspect-ratio:16/9; object-fit:contain; background:#000; border:1px solid #334256; border-radius:6px; cursor:pointer; }
+.vid img.pip:not([src]) { display:none; }
 </style>
 </head>
 <body>
@@ -62,6 +68,7 @@ input[type=range] { width:100%; accent-color:var(--accent); margin:0; }
   <span id="c-link" class="chip mono">LINK --</span>
   <span id="c-uart" class="chip mono">UART --</span>
   <span id="c-cam" class="chip mono">CAM --</span>
+  <span id="c-d436" class="chip mono">D436 --</span>
   <span id="c-clock" class="chip mono">CLOCK --</span>
   <span id="c-bat" class="chip mono">BAT --</span>
   <span id="c-mode" class="chip mono">DRIVE --</span>
@@ -74,7 +81,11 @@ input[type=range] { width:100%; accent-color:var(--accent); margin:0; }
     <div class="vid">
       <img id="cam" alt="">
       <div id="nocam" class="nocam">카메라 없음</div>
-      <div class="ov tl"><span id="v-cam" class="chip mono">CAM</span><span id="v-pt" class="chip mono">PAN -- · TILT --</span></div>
+      <img id="pip" class="pip" alt="" title="클릭하면 큰 화면과 바뀜">
+      <div class="ov tl">
+        <div class="seg" id="srcsel"><button type="button" data-src="cam" class="on">5MP</button><button type="button" data-src="color">D436 컬러</button><button type="button" data-src="depth">D436 깊이</button></div>
+        <span id="v-cam" class="chip mono">--</span><span id="v-pt" class="chip mono">PAN -- · TILT --</span>
+      </div>
       <div class="ov tr"><button id="vtoggle" type="button">영상 끄기</button></div>
       <div class="ov bl"><span id="v-spd" class="chip mono">L -- · R --</span><span id="v-time" class="chip mono">--</span></div>
     </div>
@@ -201,12 +212,28 @@ input[type=range] { width:100%; accent-color:var(--accent); margin:0; }
   $("center").addEventListener("click", () => post("/api/head", { pan: 0, tilt: 0 }));
   window.addEventListener("blur", () => { headHeld.clear(); if (headTimer) { clearInterval(headTimer); headTimer = null; } });
 
-  // Video: the <img> gets its stream only while the SSE link is up, so a dead stream never hangs on screen.
-  let videoOn = true, videoSrcSet = false, linkOk = false;
+  // Video: three sources (5 MP camera, D436 colour, D436 depth). The chosen one fills the big picture,
+  // the next one plays small at 5 fps; clicking the small picture swaps them. Streams are attached only
+  // while the SSE link is up, so a dead stream never hangs on screen.
+  const SRC = { cam: "/video.mjpg", color: "/d436/color.mjpg", depth: "/d436/depth.mjpg" };
+  const NEXT = { cam: "color", color: "depth", depth: "cam" };
+  let main = "cam", videoOn = true, videoSrcSet = false, linkOk = false;
   function videoAttach(on) {
-    if (on && !videoSrcSet) { $("cam").src = "/video.mjpg?t=" + Date.now(); videoSrcSet = true; }
-    if (!on && videoSrcSet) { $("cam").removeAttribute("src"); videoSrcSet = false; }
+    if (on && !videoSrcSet) {
+      $("cam").src = SRC[main] + "?t=" + Date.now();
+      $("pip").src = SRC[NEXT[main]] + "?fps=5&t=" + Date.now();
+      videoSrcSet = true;
+    }
+    if (!on && videoSrcSet) { $("cam").removeAttribute("src"); $("pip").removeAttribute("src"); videoSrcSet = false; }
   }
+  function setMain(src) {
+    main = src;
+    document.querySelectorAll("#srcsel button").forEach((b) => b.classList.toggle("on", b.dataset.src === main));
+    videoAttach(false); videoAttach(videoOn && linkOk);
+    if (lastState) render(lastState);
+  }
+  document.querySelectorAll("#srcsel button").forEach((b) => b.addEventListener("click", () => setMain(b.dataset.src)));
+  $("pip").addEventListener("click", () => setMain(NEXT[main]));
   $("vtoggle").addEventListener("click", () => {
     videoOn = !videoOn;
     $("vtoggle").textContent = videoOn ? "영상 끄기" : "영상 켜기";
@@ -238,10 +265,15 @@ input[type=range] { width:100%; accent-color:var(--accent); margin:0; }
     $("t-fb").textContent = (u.rate_hz || 0) + " Hz · age " + (u.feedback_age_s == null ? "--" : u.feedback_age_s + " s") + " · bad " + (u.bad_lines || 0);
     const when = s.server_time ? new Date(s.server_time) : null;
     $("stamp").textContent = when ? when.toLocaleString("sv-SE") : "--";
-    const c = s.camera || {};
+    const c = s.camera || {}, d = s.d436 || {};
     chip($("c-cam"), c.ok ? "CAM " + fmt(c.fps, 0) + " fps" : "CAM off", c.ok ? "ok" : "warn");
-    $("nocam").hidden = !!c.ok;
-    $("v-cam").textContent = "5MP " + (c.size || "") + (c.ok ? " · " + fmt(c.fps, 0) + " fps" : " · " + (c.error || "없음"));
+    chip($("c-d436"), d.connected ? "D436 " + fmt(d.fps, 0) + " fps" : "D436 off", d.connected ? "ok" : "warn");
+    const mainOk = main === "cam" ? !!c.ok : !!d.connected;
+    $("nocam").hidden = mainOk;
+    $("nocam").textContent = main === "cam" ? "5MP 카메라 없음" + (c.error ? " · " + c.error : "") : "D436 없음" + (d.error ? " · " + d.error : "");
+    $("v-cam").textContent = main === "cam"
+      ? "5MP " + (c.size || "") + (c.ok ? " · " + fmt(c.fps, 0) + " fps" : "")
+      : "D436 " + (main === "depth" ? "깊이 " : "컬러 ") + (d.size || "") + (d.connected ? " · " + fmt(d.fps, 0) + " fps · 유효 " + fmt((d.valid || 0) * 100, 0) + "% · 중앙 " + fmt(d.center_m, 2) + " m" : "");
     $("v-pt").textContent = "PAN " + fmt(fb.pan, 1) + "° · TILT " + fmt(fb.tilt, 1) + "°";
     $("v-spd").textContent = "L " + fmt(fb.L, 2) + " · R " + fmt(fb.R, 2) + " m/s";
     $("v-time").textContent = when ? when.toLocaleTimeString("sv-SE") : "--";
