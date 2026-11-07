@@ -73,7 +73,7 @@ def main():
                 n += 1
                 name = f"{label}_{n:03d}.wav"
                 r = ssh(f"aplay -q -D plughw:1,0 /tmp/wake_beep.wav 2>/dev/null; "
-                        f"arecord -q -D plughw:0,0 -f S16_LE -r 16000 -c 1 -d {int(SECONDS * 2) / 2} /tmp/wake_take.wav", timeout=30)
+                        f"arecord -q -D plughw:0,0 -f S16_LE -r 16000 -c 1 -s {int(SECONDS * 16000)} /tmp/wake_take.wav", timeout=30)
                 if r.returncode != 0:
                     print("   recording failed: " + r.stderr.strip(), flush=True)
                     continue
