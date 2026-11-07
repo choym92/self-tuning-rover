@@ -20,6 +20,7 @@ Run on the Jetson (see README.md):
     nvcr.io/nvidia/l4t-jetpack:r36.4.0 python3 /work/server.py --port 8091
 """
 import argparse
+import glob
 import json
 import os
 import select
@@ -409,20 +410,66 @@ class EyesLink:
         return urllib.request.urlopen(self.base + path, timeout=5)
 
 
+class BrainLink:
+    """Watches the LLM on the home Mac mini through the rover-brainlink tunnel (jetson/brainlink/):
+    GET /health every 2 s. Read-only on purpose: the brain gets no way into this server."""
+
+    def __init__(self, base=None):
+        self.base = base.rstrip("/") if base else None
+        self.state = {"ok": False, "ms": None, "error": "not configured" if not base else "not reached yet"}
+        if self.base:
+            threading.Thread(target=self._poll, daemon=True).start()
+
+    def _poll(self):
+        while True:
+            t0 = time.monotonic()
+            try:
+                with urllib.request.urlopen(self.base + "/health", timeout=2.0) as r:
+                    ok = r.status == 200 and b'"ok"' in r.read()
+                self.state = {"ok": ok, "ms": round((time.monotonic() - t0) * 1000), "error": None if ok else "not ready"}
+            except Exception:
+                self.state = {"ok": False, "ms": None, "error": "unreachable"}
+            time.sleep(2.0)
+
+
+def host_stats():
+    """Jetson memory and the hottest thermal zone, from /proc and /sys (both visible inside the container)."""
+    out = {}
+    try:
+        with open("/proc/meminfo") as f:
+            kb = {line.split(":")[0]: int(line.split()[1]) for line in f if line.startswith(("MemTotal", "MemAvailable"))}
+        out["mem_total_mb"], out["mem_avail_mb"] = kb["MemTotal"] // 1024, kb["MemAvailable"] // 1024
+    except (OSError, KeyError, ValueError):
+        pass
+    temps = []
+    for path in glob.glob("/sys/class/thermal/thermal_zone*/temp"):
+        try:
+            with open(path) as f:
+                temps.append(int(f.read()) / 1000.0)
+        except (OSError, ValueError):     # some Orin zones answer ENODATA
+            continue
+    if temps:
+        out["temp_c"] = round(max(temps), 1)
+    return out
+
+
 def control_loop(controller):
     while True:
         controller.tick()
         time.sleep(TICK)
 
 
-def make_handler(controller, page_path, camera=None, eyes=None):
+def make_handler(controller, page_path, camera=None, eyes=None, brain=None):
     camera = camera or Camera()
     eyes = eyes or EyesLink()
+    brain = brain or BrainLink()
 
     def state():
         s = controller.snapshot()
         s["camera"] = camera.stats()
         s["d436"] = eyes.state
+        s["brain"] = brain.state
+        s["host"] = host_stats()
         return s
 
     class Handler(BaseHTTPRequestHandler):
@@ -580,9 +627,9 @@ def make_handler(controller, page_path, camera=None, eyes=None):
     return Handler
 
 
-def serve(controller, host, port, page_path, camera=None, eyes=None):
+def serve(controller, host, port, page_path, camera=None, eyes=None, brain=None):
     threading.Thread(target=control_loop, args=(controller,), daemon=True).start()
-    httpd = ThreadingHTTPServer((host, port), make_handler(controller, page_path, camera, eyes))
+    httpd = ThreadingHTTPServer((host, port), make_handler(controller, page_path, camera, eyes, brain))
     httpd.daemon_threads = True
     return httpd
 
@@ -596,6 +643,7 @@ def main():
     ap.add_argument("--allow-drive", action="store_true", help="accept drive commands (off: telemetry only)")
     ap.add_argument("--camera", default="/dev/video0", help="V4L2 device for /video.mjpg; 'none' to run without video")
     ap.add_argument("--eyes", default="http://127.0.0.1:8094", help="eyes service (D436) proxied under /d436/; 'none' to disable")
+    ap.add_argument("--brain", default="http://rover-brainlink:8080", help="LLM health check through the tunnel; 'none' to disable")
     ap.add_argument("--pan-trim", type=float, default=0.0, help="servo pan reading of the true forward direction (calibration)")
     ap.add_argument("--tilt-trim", type=float, default=0.0, help="servo tilt reading of level forward (calibration)")
     ap.add_argument("--head-spd", type=int, default=HEAD_SPD, help="T:133 SPD for the pan-tilt servos; 0 = fastest")
@@ -608,9 +656,11 @@ def main():
                             head_spd=args.head_spd, head_acc=args.head_acc)
     camera = Camera(None if args.camera == "none" else args.camera)
     eyes = EyesLink(None if args.eyes == "none" else args.eyes)
-    httpd = serve(controller, args.host, args.port, os.path.join(HERE, "index.html"), camera, eyes)
-    print("rover-control on %s:%d, serial %s, cap %d, drive %s, camera %s, eyes %s" % (
-        args.host, args.port, args.serial, args.cap, "ALLOWED" if args.allow_drive else "disabled", args.camera, args.eyes), flush=True)
+    brain = BrainLink(None if args.brain == "none" else args.brain)
+    httpd = serve(controller, args.host, args.port, os.path.join(HERE, "index.html"), camera, eyes, brain)
+    print("rover-control on %s:%d, serial %s, cap %d, drive %s, camera %s, eyes %s, brain %s" % (
+        args.host, args.port, args.serial, args.cap, "ALLOWED" if args.allow_drive else "disabled", args.camera, args.eyes,
+        args.brain), flush=True)
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

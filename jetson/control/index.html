@@ -111,6 +111,7 @@ input[type=range] { width:100%; accent-color:var(--accent); margin:0; }
     <span id="c-uart" class="chip mono">UART --</span>
     <span id="c-cam" class="chip mono">CAM --</span>
     <span id="c-d436" class="chip mono">D436 --</span>
+    <span id="c-brain" class="chip mono">BRAIN --</span>
     <span id="c-clock" class="chip mono">CLOCK --</span>
     <span id="c-bat" class="chip mono">BAT --</span>
     <span id="c-mode" class="chip mono">DRIVE --</span>
@@ -180,6 +181,14 @@ input[type=range] { width:100%; accent-color:var(--accent); margin:0; }
           <span>Accel (raw)</span><span id="t-acc">--</span>
           <span>Gyro (raw)</span><span id="t-gyr">--</span>
           <span>UART</span><span id="t-fb">--</span>
+        </div>
+      </details>
+      <details class="more">
+        <summary>Servers</summary>
+        <div class="grid mono">
+          <span>Brain (Mac mini)</span><span id="t-brain">--</span>
+          <span>Jetson memory</span><span id="t-mem">--</span>
+          <span>Jetson temp</span><span id="t-temp">--</span>
         </div>
       </details>
     </div>
@@ -330,6 +339,12 @@ input[type=range] { width:100%; accent-color:var(--accent); margin:0; }
     $("t-fb").textContent = (u.rate_hz || 0) + " Hz · age " + (u.feedback_age_s == null ? "--" : u.feedback_age_s + " s") + " · bad " + (u.bad_lines || 0);
     const when = s.server_time ? new Date(s.server_time) : null;
     $("stamp").textContent = when ? when.toLocaleString("sv-SE") : "--";
+    const b = s.brain || {}, hs = s.host || {};
+    const brainSlow = b.ok && b.ms > 1000;
+    chip($("c-brain"), !b.ok ? "BRAIN off" : brainSlow ? "BRAIN " + b.ms + " ms" : "BRAIN ok", b.ok && !brainSlow ? "ok" : "warn");
+    $("t-brain").textContent = b.ok ? "ok · " + b.ms + " ms" : "off · " + (b.error || "--");
+    $("t-mem").textContent = hs.mem_avail_mb == null ? "--" : (hs.mem_avail_mb / 1024).toFixed(1) + " of " + (hs.mem_total_mb / 1024).toFixed(1) + " GB free";
+    $("t-temp").textContent = hs.temp_c == null ? "--" : hs.temp_c.toFixed(0) + " °C";
     const c = s.camera || {}, d = s.d436 || {};
     const camSlow = c.ok && c.fps < 15;
     chip($("c-cam"), !c.ok ? "CAM off" : camSlow ? "CAM " + fmt(c.fps, 0) + " fps" : "CAM on", c.ok && !camSlow ? "ok" : "warn");

@@ -4,8 +4,10 @@
 """
 import json
 import os
+import socket
 import sys
 import threading
+import time
 import unittest
 import urllib.error
 import urllib.request
@@ -227,6 +229,40 @@ class FakeEyesHandler(server.BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+
+class FakeBrainHandler(server.BaseHTTPRequestHandler):
+    def log_message(self, *a):
+        pass
+
+    def do_GET(self):
+        body = b'{"status":"ok"}' if self.path == "/health" else b"{}"
+        self.send_response(200 if self.path == "/health" else 404)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+
+class BrainTests(unittest.TestCase):
+    def test_brain_link_reports_up_and_down(self):
+        fake = server.ThreadingHTTPServer(("127.0.0.1", 0), FakeBrainHandler)
+        threading.Thread(target=fake.serve_forever, daemon=True).start()
+        up = server.BrainLink("http://127.0.0.1:%d" % fake.server_address[1])
+        free = socket.socket(); free.bind(("127.0.0.1", 0)); port = free.getsockname()[1]; free.close()
+        down = server.BrainLink("http://127.0.0.1:%d" % port)
+        deadline = time.time() + 3
+        while time.time() < deadline and (up.state["error"] == "not reached yet" or down.state["error"] == "not reached yet"):
+            time.sleep(0.05)
+        self.assertTrue(up.state["ok"])
+        self.assertIsInstance(up.state["ms"], int)
+        self.assertEqual((down.state["ok"], down.state["error"]), (False, "unreachable"))
+        self.assertEqual(server.BrainLink().state["error"], "not configured")
+        fake.shutdown(); fake.server_close()
+
+    def test_host_stats_is_a_plain_dict(self):
+        st = server.host_stats()                     # empty on a Mac, filled on the Jetson
+        self.assertIsInstance(st, dict)
+        self.assertTrue(set(st) <= {"mem_total_mb", "mem_avail_mb", "temp_c"})
 
 
 class ApiTests(unittest.TestCase):

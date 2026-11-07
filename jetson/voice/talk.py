@@ -2,10 +2,11 @@
 """One spoken English turn with the rover, orchestrated from the Mac over SSH.
 
   record (rover microphone) -> Whisper (Jetson, rover-stt container)
-  -> Gemma (Jetson, rover-llm container) -> Supertonic (Jetson, rover-tts-st) -> rover speaker
+  -> Gemma (home Mac mini, via rover-brainlink) -> Supertonic (Jetson, rover-tts-st) -> rover speaker
 
 The Jetson side uses host `arecord`/`aplay`, `curl` and three containers: rover-stt (Whisper),
-rover-llm (Gemma) and rover-tts (Kokoro, `jetson/tts/`). `--tts mac` falls back to macOS `say`.
+rover-brainlink (tunnel to Gemma on the home Mac mini, `jetson/brainlink/`) and rover-tts-st (Supertonic,
+`jetson/tts/`). `--tts mac` falls back to macOS `say`.
 
   python3 jetson/voice/talk.py                 # record 5 s, answer, speak
   python3 jetson/voice/talk.py --text "Hi"     # skip the microphone, type the question
@@ -67,12 +68,14 @@ def ask_llm(question):
                        "max_tokens": 110, "temperature": 0.9,
                        # Gemma otherwise spends every token in reasoning_content and answers nothing.
                        "chat_template_kwargs": {"enable_thinking": False}})
-    cmd = ("curl -s http://127.0.0.1:8080/v1/chat/completions -H Content-Type:application/json -d " + shlex.quote(body))
+    # The LLM runs on the home Mac mini behind the rover-brainlink tunnel; give up after 30 s.
+    cmd = ("curl -sf -m 30 http://127.0.0.1:8080/v1/chat/completions -H Content-Type:application/json -d " + shlex.quote(body))
     t0 = time.perf_counter()
-    r = ssh(cmd)
-    if r.returncode != 0:
-        sys.exit("llm failed: " + r.stderr.strip())
-    reply = json.loads(r.stdout)["choices"][0]["message"]["content"].strip()
+    r = ssh(cmd, timeout=45)
+    try:
+        reply = json.loads(r.stdout)["choices"][0]["message"]["content"].strip()
+    except (ValueError, KeyError, IndexError):
+        return None, time.perf_counter() - t0
     return reply, time.perf_counter() - t0
 
 
@@ -83,6 +86,9 @@ def pick_voice(requested):
     names = {line.split("  ")[0].strip() for line in installed.splitlines()}
     return next((v for v in PREFERRED_VOICES if v in names), "Samantha")
 
+
+# Said on the rover when the LLM does not answer (rendered once with Supertonic M1 into ~/voice on the Jetson).
+OFFLINE_WAV = {"en": "/home/paulcho/voice/brain_offline_en.wav", "ko": "/home/paulcho/voice/brain_offline_ko.wav"}
 
 KOKORO_VOICE, SUPERTONIC_VOICE = "af_jessica", "M1"
 # Paul's choice, 2026-11-06: Supertonic M1 speaks both languages (one voice, Korean support,
@@ -145,6 +151,11 @@ def main():
         print("nothing understood; not answering")
         return
     reply, t_llm = ask_llm(heard)
+    if reply is None:
+        print(f"no answer from the LLM after {t_llm:.1f} s (Mac mini or rover-brainlink down?)")
+        if args.tts == "robot":
+            ssh(PLAY.format(wav=OFFLINE_WAV["ko" if HANGUL.search(heard) else "en"]))
+        sys.exit(1)
     print(f"reply  ({t_llm:.1f} s): {reply}")
     if args.tts == "robot":
         t_tts, synth, engine = speak_robot(reply, args.voice)
