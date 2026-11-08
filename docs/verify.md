@@ -712,6 +712,21 @@ After a time question, "7C2000뿐이라고." got "응? 잘 못 들었어, 다시
 게임이야?"). Mishearings that read as normal sentences still pass: "720,000 won." was taken as money 3/3,
 "It's a good bye." as goodbye 3/3. An ordinary sentence ("내일 누나가 와.") was answered normally 3/3.
 
+## New personality, E2B against E4B (2026-11-07, Mac mini)
+
+Replay of Paul's nine lines as turbo heard them at 20:13 (seven real, two added), in order, with the
+live style, rules and a fixed "Right now" line, one run each at temperature 0.9. The live 20:13
+conversation (old personality, "dry, curious and a little lazy") had answered "난 그냥 좀 쉬고 싶어",
+"그냥 좀 생각할 시간이 필요해".
+
+| Version | Time per answer | What stood out |
+|---|---|---|
+| E2B, old personality | 0.3-1.3 s, 51-55 tok/s | calmer than live this time, still "그냥 조용히 있는 거 좋아" |
+| E2B, new personality (warm, answers first, never brushes Paul off) | 0.5-1.3 s, 53-55 tok/s | answered and asked back ("무슨 일 있어?", "무슨 일 있었는지 얘기해 줄 수 있어?"); once over-sweet ("정말 큰 선물이야") |
+| E4B, new personality | 1.1-2.9 s, 27-29 tok/s | asked again on the garbled line; read "당가워" as hot weather; after "회사에서 힘들었어" asked "오늘 하루는 어땠어?"; emoji; "파울" for Paul |
+
+One run per line; the differences are impressions, not scores.
+
 ## Pan-tilt settle correction (2026-11-07, Jetson on the rover)
 
 Before: "Center" (T:133 to 0/0) left the ST3215 head at +1.0 or -1.1 deg pan depending on the
