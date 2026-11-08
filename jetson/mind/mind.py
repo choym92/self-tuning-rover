@@ -36,6 +36,8 @@ from memory import Memory
 RATE = 16000
 FRAME = 480                      # 30 ms of 16-bit mono
 HANGUL = re.compile(r"[가-힣]")
+# Everything Kalman says is spoken, so emoji are dropped before the voice (E4B wrote "😥", 2026-11-07).
+EMOJI = re.compile("[\U0001F000-\U0001FAFF\u2600-\u27BF\uFE0F\u200D]")
 SENTENCE_END = re.compile(r"(?<=[.!?。！？])\s+")
 WHISPER_PROMPT = "Kalman is a small robot. Hey Kalman."   # name-only hint measured 6/6 (docs/verify.md)
 # Lines Whisper is known to invent from short noise (YouTube-caption endings); seen on the rover 2026-11-07.
@@ -301,7 +303,7 @@ def sentences(stream, first_clause_words=4):
     piece may end at a comma once it has `first_clause_words` words, so the first sound comes sooner."""
     buf, first = "", True
     for piece in stream:
-        buf += piece
+        buf += EMOJI.sub("", piece)
         if first and "," in buf and len(buf.split(",")[0].split()) >= first_clause_words:
             head, buf = buf.split(",", 1)
             first = False

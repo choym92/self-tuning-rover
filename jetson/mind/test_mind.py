@@ -297,6 +297,11 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual([e["kind"] for e in mind.recent_journal(j.folder)], ["heard", "reply"])
 
 
+class EmojiTests(unittest.TestCase):
+    def test_emoji_never_reach_the_voice(self):
+        self.assertEqual(list(mind.sentences(iter(["힘들었구나. 😥 ", "오늘 어땠어? 😊"]))), ["힘들었구나.", "오늘 어땠어?"])
+        self.assertEqual(list(mind.sentences(iter(["Nice! ❤️👍"]))), ["Nice!"])
+
 class MemoryTests(unittest.TestCase):
     def setUp(self):
         import tempfile
