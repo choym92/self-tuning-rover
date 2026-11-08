@@ -51,8 +51,16 @@ words and voice settings only, never motion.
 
 Run command now also mounts `-v /home/paulcho/kalman/config:/config`.
 
-Sessions: a conversation is a session (`s20261107-185501`), opened when Kalman is called outside a
-conversation and closed by the low tone. Every journal event in it carries the id; the prompt carries
-only the current session's turns. Nothing is deleted: earlier sessions stay in the journal and are meant
-to come back through recall (summaries and approved facts first; design in `docs/decisions.md`).
+Sessions (`memory.py`): a session (`s20261107-185501`) opens when Kalman is called with none open and
+closes after `session_gap_min` (30) quiet minutes, so several conversations can share one. Every journal
+event in it carries the id; the prompt carries only the current session's turns. When a session closes,
+a background worker asks the model for a short `session_summary` (prompt `prompt/summary.md`); today's
+earlier summaries go into the prompt as "Earlier today". When a day is over, its summaries become one
+`day_summary` (`prompt/day.md`). Summaries missed while the Mac mini was off are made later; a session
+left open by a restart is closed and summarised. Nothing is deleted. To change the summary instructions,
+copy `summary.md` or `day.md` into `/home/paulcho/kalman/config/` and edit the copy.
+
+Language: Whisper detects the language (`--language auto`); Korean questions get Korean answers and the
+Korean voice. "칼만" written in Hangul wakes Kalman; 고마워, 그만, 잘 자 and similar end a conversation.
+Single short Korean words are often misheard (`docs/verify.md`).
 

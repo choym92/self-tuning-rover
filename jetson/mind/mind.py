@@ -31,6 +31,8 @@ from collections import deque
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+from memory import Memory
+
 RATE = 16000
 FRAME = 480                      # 30 ms of 16-bit mono
 HANGUL = re.compile(r"[가-힣]")
@@ -38,10 +40,14 @@ SENTENCE_END = re.compile(r"(?<=[.!?。！？])\s+")
 WHISPER_PROMPT = "Kalman is a small robot. Hey Kalman."   # name-only hint measured 6/6 (docs/verify.md)
 # Lines Whisper is known to invent from short noise (YouTube-caption endings); seen on the rover 2026-11-07.
 INVENTED = re.compile(r"^\W*(thank(s| you)( so much| very much)?( for (watching|listening)\b.*)?|please subscribe.*|"
-                      r"subscribe.*|you|bye|\.+)\W*$", re.I)
+                      r"subscribe.*|you|bye|\.+|"
+                      # the Korean equivalents Whisper is known to invent (broadcast and video endings)
+                      r"시청해\s*주셔서\s*감사합니다.*|구독과?\s*좋아요.*|MBC\s*뉴스.*)\W*$", re.I)
 
 
-NAME = re.compile(r"^\W*(?:(?:hey|hi|hello|ok|okay|yo)\W+)?kalman\b\W*", re.I)
+NAME = re.compile(r"^\W*(?:(?:hey|hi|hello|ok|okay|yo)\W+)?kalman\b\W*|"
+                  # with Korean on, Whisper may write the name in Hangul ("헤이 칼만", "칼만아", "칼만은?")
+                  r"^\W*(?:(?:헤이|하이|오케이|야)\W*)?(?:칼만|칼먼|캘먼|칼맨)(?:아|야|은|는|이)?(?![가-힣])\W*", re.I)
 
 
 # Whisper sometimes repeats its own prompt ("Kalman's a huge robot. Kalman.", 2026-11-07).
@@ -63,8 +69,11 @@ END = re.compile(r"^\W*(?:(?:ok|okay|alright|all right)\W+)?(?:thank you|thanks|
                  r"go to sleep|that'?s all|that is all|never mind|nevermind)\b[\w\s,'.!]*$", re.I)
 
 
+END_KO = re.compile(r"^\W*(?:고마워|고맙다|고맙습니다|감사합니다|그만|됐어|잘\s*가|잘\s*자|안녕|끝|이제\s*됐어)[\w\s,.!~]*$")
+
+
 def is_end(text):
-    return bool(END.match(text or "")) and len((text or "").split()) <= 6
+    return bool(END.match(text or "") or END_KO.match(text or "")) and len((text or "").split()) <= 6
 
 
 # Barge-in (stage 1, no echo canceller): while Kalman speaks the microphone keeps listening, every phrase
@@ -331,10 +340,12 @@ SETTINGS = {
     "tts_steps": (10, 2, 16, "voice quality steps on the Mac mini (more = slower)"),
     "barge_ratio": (2.0, 1.2, 6.0, "interrupt when the mic is this many times louder than his own echo"),
     "barge_hold_s": (0.3, 0.1, 1.5, "that loud for this long"),
+    "session_gap_min": (30.0, 1.0, 720.0, "minutes of quiet that end a session (then it is summarised)"),
 }
 
 
 PROMPT_PARTS = ("identity", "style", "rules")
+MEMORY_PARTS = ("summary", "day")          # instructions for the session and day summaries (memory.py)
 
 
 class Config:
@@ -350,6 +361,7 @@ class Config:
         for k in PROMPT_PARTS:
             if not os.path.exists(self.path(k)):
                 self.write_part(k, self.seed[k])
+        self.memory_seed = {k: open(os.path.join(seed_dir, k + ".md"), encoding="utf-8").read().strip() for k in MEMORY_PARTS}
         self._cache = {}
 
     def path(self, part):
@@ -370,6 +382,10 @@ class Config:
 
     def parts(self):
         return {k: (self._read(self.path(k), str.strip) or "").strip() for k in PROMPT_PARTS}
+
+    def memory_prompts(self):
+        """summary.md and day.md: a copy in /config, if Paul made one, wins over the repository's."""
+        return {k: (self._read(self.path(k), str.strip) or self.memory_seed[k]) for k in MEMORY_PARTS}
 
     def settings(self):
         saved = self._read(self.settings_path, json.loads) or {}
@@ -412,6 +428,8 @@ class Journal:
         now = datetime.now().astimezone()
         rec = {"ts": now.isoformat(timespec="milliseconds"), "kind": kind,
                **({"session": self.session} if self.session else {}), **fields}
+        if rec.get("session") is None:          # session=None: an event that belongs to no session
+            rec.pop("session", None)
         with self.lock, open(os.path.join(self.folder, now.strftime("%Y-%m-%d") + ".jsonl"), "a", encoding="utf-8") as f:
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
         print(json.dumps(rec, ensure_ascii=False), flush=True)
@@ -433,6 +451,10 @@ class Mind:
         self.speaking = False
         self.recent = deque(maxlen=int(1.0 * RATE / FRAME))     # pre-roll and noise level
         self.history = deque(maxlen=40)                          # last turns; the setting decides how many are sent
+        self.last_activity = 0.0
+        self.memory = Memory(args.journal, self.journal.write, self.ask, self.cfg.memory_prompts)
+        self.memory.close_dangling()
+        self.memory.start()
 
     # --- services -------------------------------------------------------------------------
     def transcribe(self, pcm):
@@ -470,7 +492,11 @@ class Mind:
             rule += (" Paul just cut you off mid-answer. Drop what you were saying: do not finish it, repeat it or"
                      " go back to it. Reply only to his new words, briefly.")
         parts = self.cfg.parts()
-        system = "\n\n".join([*(parts[k] for k in PROMPT_PARTS if parts[k]), self.state_line(), rule])
+        earlier = self.memory.earlier_today(self.journal.session)
+        recall = ("Earlier today (summaries of your finished conversations with Paul; they may contain mishearings,"
+                  " so if you are not sure, say so):\n" + "\n".join(f"- {t} {text}" for t, text in earlier)) if earlier else ""
+        system = "\n\n".join([*(parts[k] for k in PROMPT_PARTS if parts[k]), *([recall] if recall else []),
+                               self.state_line(), rule])
         n = int(self.cfg.settings()["history_messages"])
         past = list(self.history)[-n:] if n else []
         return [{"role": "system", "content": system}, *past, {"role": "user", "content": heard}]
@@ -484,6 +510,14 @@ class Mind:
                                      headers={"Content-Type": "application/json"})
         resp = urllib.request.urlopen(req, timeout=30)
         return resp, sse_text(resp)
+
+    def ask(self, system, user):
+        """One plain answer from the model, for background work such as summaries."""
+        body = json.dumps({"messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+                           "max_tokens": 200, "temperature": 0.2, "chat_template_kwargs": {"enable_thinking": False}}).encode()
+        req = urllib.request.Request(self.a.llm + "/v1/chat/completions", data=body, headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=120) as r:
+            return json.loads(r.read())["choices"][0]["message"]["content"]
 
     def synthesize(self, text):
         """Kalman's voice from the Mac mini (about 5x faster, docs/verify.md); the Jetson's own Supertonic
@@ -564,16 +598,23 @@ class Mind:
 
     # --- one turn -------------------------------------------------------------------------
     def begin_session(self):
-        """A conversation is a session: it starts when Kalman is called outside a conversation. The prompt
-        carries only this session's turns; earlier sessions stay in the journal (nothing is deleted) and
-        will come back through recall (docs/decisions.md, 2026-11-07)."""
+        """A session starts when Kalman is called with none open and ends after session_gap_min minutes of
+        quiet, so short pauses between conversations keep the thread. The prompt carries only this
+        session's turns; finished sessions are summarised (memory.py) and nothing is deleted
+        (docs/decisions.md, 2026-11-07)."""
         self.journal.session = datetime.now().astimezone().strftime("s%Y%m%d-%H%M%S")
         self.history.clear()
         self.journal.write("session_start")
 
+    def end_session(self, reason):
+        self.journal.write("session_end", reason=reason)
+        self.journal.session = None
+        self.memory.nudged.set()
+
     def turn(self, source, frames, called="", question="", depth=0, interrupted=False):
         """One exchange. With `question` (said in the same breath as the name) Kalman answers at once;
         otherwise it beeps and records the question."""
+        self.last_activity = time.monotonic()
         if not self.journal.session:
             self.begin_session()
         self.journal.write("wake", source=source, heard=called)
@@ -651,7 +692,7 @@ class Mind:
                         stop.set()
                         break
             reply = " ".join(said) + (" [interrupted]" if cut else "")
-            self.journal.write("reply", text=reply, model=self.a.model_name, first_sound_ms=first,
+            self.journal.write("reply", heard=heard, text=reply, model=self.a.model_name, first_sound_ms=first,
                                ms=round((time.monotonic() - t2) * 1000))
             # An interrupted answer stays in the history only as a stub, so the model does not pick it up again.
             kept = "(I started answering but Paul cut me off.)" if cut else reply
@@ -719,7 +760,7 @@ class Mind:
     def end_conversation(self, reason):
         self.convo_until = 0.0
         self.journal.write("conversation_end", reason=reason)
-        self.journal.session = None
+        self.last_activity = time.monotonic()
         self.speaking = True
         self.play(tone(freq=440.0, seconds=0.25, volume=0.2))
         self.speaking = False
@@ -737,6 +778,9 @@ class Mind:
             in_convo = time.monotonic() < self.convo_until
             if self.convo_until and not in_convo and gate.frames is None:
                 self.end_conversation("quiet")
+            if (self.journal.session and not in_convo and
+                    time.monotonic() - self.last_activity > 60 * float(self.cfg.settings()["session_gap_min"])):
+                self.end_session("quiet")
             phrase = gate.feed(frame)
             if phrase:
                 t = time.monotonic()
@@ -769,7 +813,8 @@ class Mind:
                 self.state = "listening"
 
 
-JOURNAL_KINDS = ("session_start", "wake", "heard", "reply", "interrupted", "conversation_end", "ignored", "error")
+JOURNAL_KINDS = ("session_start", "wake", "heard", "reply", "interrupted", "conversation_end", "ignored", "error",
+                 "session_end", "session_summary", "day_summary")
 
 
 def recent_journal(folder, n=40):
@@ -854,7 +899,7 @@ def main():
     ap.add_argument("--tts", default="http://127.0.0.1:8097", help="Supertonic on the Mac mini through rover-brainlink")
     ap.add_argument("--tts-fallback", default="http://127.0.0.1:8093", help="the Jetson's own Supertonic (rover-tts-st)")
     ap.add_argument("--voice", default="M1")
-    ap.add_argument("--language", default="en", help="Whisper language for now (English-only model setting)")
+    ap.add_argument("--language", default="auto", help="Whisper language: auto (Korean and English, Paul 2026-11-07), en or ko")
     ap.add_argument("--model-name", default="gemma-4-E2B-it-Q4_K_M", help="recorded in the journal")
     ap.add_argument("--prompt-dir", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "prompt"),
                     help="default prompt parts (identity.md, style.md, rules.md)")

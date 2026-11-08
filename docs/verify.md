@@ -653,6 +653,35 @@ name, so it may only help transcription and must not decide wake-up. large-v3-tu
 per 5 s clip on the MacBook (first load 12 s); the Mac mini is unmeasured. The model was removed
 afterwards.
 
+## Whisper automatic language and session summaries (2026-11-07, Jetson on the rover)
+
+Whisper base (`rover-stt`), `language` sent per request. Two sources: Paul's 33 wake-recording clips
+(`private/wake/20261107-173812/`, English, a messy session where several "positive" clips are silent
+and several "negative" clips contain "Hey Kalman") and Supertonic's synthetic voice M1 (not Paul).
+
+| Setting | Paul's clips woke (pos / neg / quiet) | Notes |
+|---|---|---|
+| `en`, name prompt (before) | 8/15, 5/15, 0/3 | |
+| `auto`, name prompt (now) | 8/15, 5/15, 0/3 | same transcripts except one ("Hello" → "-아이고") |
+| `auto`, name prompt + Korean sentence | 7/15, 5/15, 0/3 | invented text on two quiet clips; not used |
+
+Synthetic voice, one take each: with `en`, Korean was translated to English ("헤이 칼만, 오늘 기분 어때?"
+→ "How do you feel today?", "내일 우리 누나가 집에 와." → "Come home tomorrow."). With `auto` it was
+written in Korean correctly ("Hey Kalman. 오늘 기분 어때?", "배고파?", "내일 우리 누나가 집에 와."), about
+0.1 s slower (0.23-0.38 s against 0.15-0.21 s). Single short words were unreliable with every prompt
+("그만" → "Come on", "응" → "Hmm", "아니" → "Honey"; "고마워" once → "Kalman."). Not tested: Paul's own
+Korean, mixed-language sentences, a noisy room.
+
+Session summaries by Gemma 4 E2B on the Mac mini (temperature 0.2), on tonight's 18:43-18:46 journal
+lines and a made-up Korean conversation: the first prompt reported Kalman's invented sights as facts
+("Kalman saw the light from the window"); after "only Paul's lines are evidence" two runs out of two
+kept to Paul's words, and the Korean fact (a named visitor and the day) was kept. Misheard lines are
+paraphrased rather than marked "unclear". The day summary with one line per session kept every session
+but shortened details ("her name, Jimin" without "sister"). 0.9-1.6 s per summary.
+
+Earlier the same day (section above): large-v3-turbo wrote the name right on 4/6 of Paul's English clips
+against 6/6 for base with the prompt, and invented "Hey Kalman." on a quiet clip.
+
 ## Pan-tilt settle correction (2026-11-07, Jetson on the rover)
 
 Before: "Center" (T:133 to 0/0) left the ST3215 head at +1.0 or -1.1 deg pan depending on the
