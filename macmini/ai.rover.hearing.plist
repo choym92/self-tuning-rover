@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Kalman's hearing on the home Mac mini: whisper.cpp v1.9.4 whisper-server with large-v3-turbo on Metal,
+     loopback 8098. The rover's own Whisper base still decides wake-up; this one rewrites what Paul says
+     after a wake, because base mishears his Korean (docs/verify.md, 2026-11-07). -ac 512 (about 10 s of
+     audio, the rover's longest phrase) brings a question from 2.6 s to 0.8 s.
+     Install: cp ai.rover.hearing.plist ~/Library/LaunchAgents/ && launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/ai.rover.hearing.plist
+     Remove:  launchctl bootout gui/$(id -u)/ai.rover.hearing && rm ~/Library/LaunchAgents/ai.rover.hearing.plist -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>ai.rover.hearing</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/paul/rover-brain/hearing/build/bin/whisper-server</string>
+    <string>--host</string><string>127.0.0.1</string>
+    <string>--port</string><string>8098</string>
+    <string>-m</string><string>/Users/paul/rover-brain/hearing/models/ggml-large-v3-turbo.bin</string>
+    <string>-l</string><string>auto</string>
+    <string>-t</string><string>4</string>
+    <string>-ac</string><string>512</string>
+  </array>
+  <key>WorkingDirectory</key><string>/Users/paul/rover-brain/hearing</string>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <key>ProcessType</key><string>Interactive</string>
+  <key>StandardOutPath</key><string>/Users/paul/rover-brain/hearing/server.log</string>
+  <key>StandardErrorPath</key><string>/Users/paul/rover-brain/hearing/server.log</string>
+</dict>
+</plist>

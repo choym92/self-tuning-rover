@@ -175,6 +175,16 @@ def strip_echo(heard, spoken):
     return " ".join(toks[i:])
 
 
+def unrepeat(text):
+    """The Mac mini's turbo, run on a short audio window, sometimes writes one line several times
+    ("지금 몇 시야?" x3, docs/verify.md). Joins the lines and drops a line equal to the one before."""
+    out = []
+    for line in (t.strip() for t in (text or "").splitlines()):
+        if line and (not out or line != out[-1]):
+            out.append(line)
+    return " ".join(out)
+
+
 def is_speech(text):
     """False for empty text, sound tags only ([BEEP], (noise)) and lines Whisper invents from noise."""
     words = re.sub(r"\[[^\]]*\]|\([^)]*\)", "", text).strip(" .,!?")
@@ -457,23 +467,37 @@ class Mind:
         self.memory.start()
 
     # --- services -------------------------------------------------------------------------
-    def whisper(self, wav, language):
+    def whisper(self, wav, language, url):
         body, ctype = multipart({"temperature": "0", "language": language, "response_format": "verbose_json",
                                  "prompt": WHISPER_PROMPT}, wav)
-        req = urllib.request.Request(self.a.stt + "/inference", data=body, headers={"Content-Type": ctype})
-        with urllib.request.urlopen(req, timeout=30) as r:
+        req = urllib.request.Request(url + "/inference", data=body, headers={"Content-Type": ctype})
+        with urllib.request.urlopen(req, timeout=10) as r:
             return json.loads(r.read())
 
-    def transcribe(self, pcm):
+    def transcribe(self, pcm, url=None):
         """Whisper base picks the language itself and on short Korean phrases sometimes picks Japanese or
         Spanish ("칼만아 일어나" came out in katakana, 2026-11-07). Kalman only hears Korean and English, so
         any other language is transcribed again as whichever of the two scored higher."""
-        wav = wav_bytes(pcm)
-        r = self.whisper(wav, self.a.language)
+        wav, url = wav_bytes(pcm), url or self.a.stt
+        r = self.whisper(wav, self.a.language, url)
         if self.a.language == "auto" and r.get("detected_language") not in (None, "english", "korean"):
             probs = r.get("language_probabilities") or {}
-            r = self.whisper(wav, "ko" if probs.get("ko", 0) >= probs.get("en", 0) else "en")
-        return r.get("text", "").strip()
+            r = self.whisper(wav, "ko" if probs.get("ko", 0) >= probs.get("en", 0) else "en", url)
+        return unrepeat(r.get("text", ""))
+
+    def hear(self, pcm):
+        """What Paul says to Kalman (after a wake, follow-ups, an interruption): the Mac mini's large-v3-turbo,
+        because the rover's base mishears his Korean ("7시 23분이라고" -> "7C2000뿐이라고", 2026-11-07).
+        The rover's base still decides wake-up (turbo invents the name on silence) and takes over when the
+        mini does not answer. Returns (text, which model)."""
+        if self.a.stt_big:
+            try:
+                return self.transcribe(pcm, self.a.stt_big), "turbo"
+            except Exception as e:
+                if str(e) != getattr(self, "big_error", None):          # log an outage once, not every phrase
+                    self.big_error = str(e)
+                    self.journal.write("error", where="stt-big", error=str(e))
+        return self.transcribe(pcm), "base"
 
     def state_line(self):
         """'Right now' facts filled in for every reply, so the model talks about the real battery, not a script."""
@@ -622,7 +646,7 @@ class Mind:
         self.journal.session = None
         self.memory.nudged.set()
 
-    def turn(self, source, frames, called="", question="", depth=0, interrupted=False):
+    def turn(self, source, frames, called="", question="", depth=0, interrupted=False, by=None):
         """One exchange. With `question` (said in the same breath as the name) Kalman answers at once;
         otherwise it beeps and records the question."""
         self.last_activity = time.monotonic()
@@ -631,6 +655,8 @@ class Mind:
         self.journal.write("wake", source=source, heard=called)
         if question:
             heard = question
+            if by:
+                self.journal.write("heard", text=heard, by=by)
         else:
             # The microphone keeps recording while the beep plays, so the frames queued during the beep
             # (plus a margin for the speaker's own latency) are dropped; otherwise the beep reads as speech.
@@ -650,11 +676,11 @@ class Mind:
                 return
             t1 = time.monotonic()
             try:
-                heard = self.transcribe(pcm)
+                heard, by = self.hear(pcm)
             except Exception as e:
                 self.journal.write("error", where="stt", error=str(e))
                 return
-            self.journal.write("heard", text=heard, lang=self.a.language, seconds=round(len(pcm) / 2 / RATE, 2),
+            self.journal.write("heard", text=heard, by=by, lang=self.a.language, seconds=round(len(pcm) / 2 / RATE, 2),
                                ms=round((time.monotonic() - t1) * 1000))
         if not is_speech(heard):
             self.journal.write("ignored", text=heard)
@@ -723,7 +749,7 @@ class Mind:
                 said_now = ""
                 if pcm:
                     try:
-                        said_now = self.transcribe(pcm)
+                        said_now = self.hear(pcm)[0]
                     except Exception as e:
                         self.journal.write("error", where="stt", error=str(e))
                 own_removed = strip_echo(said_now, spoken_now)
@@ -805,20 +831,28 @@ class Mind:
                 woke, question = split_wake(called)
                 if self.a.log_phrases and not woke:
                     print(json.dumps({"kind": "phrase", "text": called}, ensure_ascii=False), flush=True)
+                by = None
                 if woke:
                     source = "name"
-                    question = question if is_speech(question) else ""
-                elif in_convo and is_end(called):
-                    self.end_conversation("said: " + called.strip())
-                elif in_convo and is_speech(called):
-                    woke, source, question = True, "follow-up", called.strip()
-                    self.counts["follow_ups"] += 1
+                    if is_speech(question):            # the question came in the same breath: hear it again, better
+                        again, by = self.hear(phrase)
+                        named, rest = split_wake(again)
+                        question = rest if named else again
+                    else:
+                        question = ""
+                elif in_convo and (is_end(called) or is_speech(called)):
+                    again, by = self.hear(phrase)
+                    if is_end(again):
+                        self.end_conversation("said: " + again.strip())
+                    elif is_speech(again):
+                        woke, source, question = True, "follow-up", again
+                        self.counts["follow_ups"] += 1
             if woke or self.wake.is_set():
                 self.wake.clear()
                 self.counts["wakes"] += 1
                 self.state = "turn"
                 try:
-                    self.turn(source, src, called if woke else "", question)
+                    self.turn(source, src, called if woke else "", question, by=by)
                 except Exception as e:
                     self.journal.write("error", where="turn", error=str(e))
                 self.recent.clear()
@@ -909,6 +943,8 @@ def main():
     ap.add_argument("--speaker", default="plughw:1,0")
     ap.add_argument("--stt", default="http://127.0.0.1:8095")
     ap.add_argument("--llm", default="http://127.0.0.1:8080")
+    ap.add_argument("--stt-big", default="http://127.0.0.1:8098",
+                    help="large-v3-turbo on the Mac mini through rover-brainlink, for what Paul says after a wake ('' = off)")
     ap.add_argument("--tts", default="http://127.0.0.1:8097", help="Supertonic on the Mac mini through rover-brainlink")
     ap.add_argument("--tts-fallback", default="http://127.0.0.1:8093", help="the Jetson's own Supertonic (rover-tts-st)")
     ap.add_argument("--voice", default="M1")

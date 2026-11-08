@@ -11,7 +11,8 @@ Key and pinned host key live on the Jetson in `/home/paulcho/brainlink/` (not in
 docker build -t rover/brainlink:2 jetson/brainlink        # on the Jetson, from a copy of this folder
 docker network create rover                                # once
 docker run -d --name rover-brainlink --network rover -e MINI=192.168.1.197 \
-  -v /home/paulcho/brainlink:/keys:ro -p 127.0.0.1:8080:8080 -p 127.0.0.1:8097:8093 rover/brainlink:2
+  -v /home/paulcho/brainlink:/keys:ro -p 127.0.0.1:8080:8080 -p 127.0.0.1:8097:8093 \
+  -p 127.0.0.1:8098:8098 rover/brainlink:3
 docker network connect rover rover-control                 # the console reaches it as rover-brainlink:8080
 ```
 
