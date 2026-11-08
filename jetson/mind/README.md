@@ -62,10 +62,11 @@ copy `summary.md` or `day.md` into `/home/paulcho/kalman/config/` and edit the c
 
 Language: Whisper detects the language (`--language auto`); Korean questions get Korean answers and the
 Korean voice. "칼만" written in Hangul wakes Kalman; 고마워, 그만, 잘 자 and similar end a conversation.
-Single short Korean words are often misheard (`docs/verify.md`). Two Whispers: the rover's base (`rover-stt`, 8095) transcribes
-every phrase to find the name; what Paul says after a wake, follow-ups and interruptions are transcribed
-again by large-v3-turbo on the Mac mini (`--stt-big`, 8098 through `rover-brainlink`), which hears Korean
-far better; if the mini does not answer, base's text is used. Each `heard` event says `by: turbo` or
+Single short Korean words are often misheard (`docs/verify.md`). Two Whispers with separate jobs: while Kalman waits for his name,
+only the rover's base (`rover-stt`, 8095, with the name prompt) listens; inside a conversation (after a
+wake, follow-ups, interruptions) only large-v3-turbo on the Mac mini listens (`--stt-big`, 8098 through
+`rover-brainlink`, no prompt, because the English name hint pulled Korean into English). A question said
+in the same breath as the name is heard again by turbo. If the mini does not answer, base is used. Each `heard` event says `by: turbo` or
 `by: base`. `--log-phrases` prints phrases that did not wake Kalman to the container log only (a tuning
 aid; off by default).
 

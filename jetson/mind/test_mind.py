@@ -383,7 +383,7 @@ class KoreanTests(unittest.TestCase):
         m.a = types.SimpleNamespace(language="auto", stt="http://base")
         calls = []
 
-        def whisper(wav, language, url):
+        def whisper(wav, language, url, prompt=mind.WHISPER_PROMPT):
             calls.append(language)
             if language == "auto":
                 return {"text": " 次はカルマナ", "detected_language": "japanese",
@@ -393,7 +393,7 @@ class KoreanTests(unittest.TestCase):
         self.assertEqual(m.transcribe(b"\0\0" * 160), "칼만아 일어나.")
         self.assertEqual(calls, ["auto", "ko"])
         calls.clear()
-        m.whisper = lambda wav, language, url: calls.append(language) or {"text": " Hey Kalman.", "detected_language": "english"}
+        m.whisper = lambda wav, language, url, prompt=None: calls.append(language) or {"text": " Hey Kalman.", "detected_language": "english"}
         self.assertEqual(m.transcribe(b"\0\0" * 160), "Hey Kalman.")
         self.assertEqual(calls, ["auto"])
 
@@ -405,8 +405,9 @@ class KoreanTests(unittest.TestCase):
         m.journal = mind.Journal(tmp.name)
         up = {"mini": True}
 
-        def whisper(wav, language, url):
+        def whisper(wav, language, url, prompt=mind.WHISPER_PROMPT):
             if url == "http://mini":
+                self.assertEqual(prompt, "")            # no English name hint for turbo
                 if not up["mini"]:
                     raise OSError("connection refused")
                 return {"text": " 지금 몇 시야?\n 지금 몇 시야?\n 7시 23분이라고.", "detected_language": "korean"}

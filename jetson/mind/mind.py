@@ -467,32 +467,35 @@ class Mind:
         self.memory.start()
 
     # --- services -------------------------------------------------------------------------
-    def whisper(self, wav, language, url):
-        body, ctype = multipart({"temperature": "0", "language": language, "response_format": "verbose_json",
-                                 "prompt": WHISPER_PROMPT}, wav)
+    def whisper(self, wav, language, url, prompt=WHISPER_PROMPT):
+        fields = {"temperature": "0", "language": language, "response_format": "verbose_json"}
+        if prompt:
+            fields["prompt"] = prompt
+        body, ctype = multipart(fields, wav)
         req = urllib.request.Request(url + "/inference", data=body, headers={"Content-Type": ctype})
         with urllib.request.urlopen(req, timeout=10) as r:
             return json.loads(r.read())
 
-    def transcribe(self, pcm, url=None):
+    def transcribe(self, pcm, url=None, prompt=WHISPER_PROMPT):
         """Whisper base picks the language itself and on short Korean phrases sometimes picks Japanese or
         Spanish ("칼만아 일어나" came out in katakana, 2026-11-07). Kalman only hears Korean and English, so
         any other language is transcribed again as whichever of the two scored higher."""
         wav, url = wav_bytes(pcm), url or self.a.stt
-        r = self.whisper(wav, self.a.language, url)
+        r = self.whisper(wav, self.a.language, url, prompt)
         if self.a.language == "auto" and r.get("detected_language") not in (None, "english", "korean"):
             probs = r.get("language_probabilities") or {}
-            r = self.whisper(wav, "ko" if probs.get("ko", 0) >= probs.get("en", 0) else "en", url)
+            r = self.whisper(wav, "ko" if probs.get("ko", 0) >= probs.get("en", 0) else "en", url, prompt)
         return unrepeat(r.get("text", ""))
 
     def hear(self, pcm):
         """What Paul says to Kalman (after a wake, follow-ups, an interruption): the Mac mini's large-v3-turbo,
         because the rover's base mishears his Korean ("7시 23분이라고" -> "7C2000뿐이라고", 2026-11-07).
         The rover's base still decides wake-up (turbo invents the name on silence) and takes over when the
-        mini does not answer. Returns (text, which model)."""
+        mini does not answer. turbo gets no prompt: the English name hint pulled Paul's Korean into English
+        ("내 이름이 뭐냐고" -> "Deiren mi guanyago", 2026-11-07). Returns (text, which model)."""
         if self.a.stt_big:
             try:
-                return self.transcribe(pcm, self.a.stt_big), "turbo"
+                return self.transcribe(pcm, self.a.stt_big, prompt=""), "turbo"
             except Exception as e:
                 if str(e) != getattr(self, "big_error", None):          # log an outage once, not every phrase
                     self.big_error = str(e)
@@ -811,7 +814,7 @@ class Mind:
             if self.speaking:
                 continue                       # half-duplex: ignore our own voice
             self.recent.append(frame)
-            woke, called, question, source = False, "", "", "button"
+            woke, called, question, source, by = False, "", "", "button", None
             in_convo = time.monotonic() < self.convo_until
             if self.convo_until and not in_convo and gate.frames is None:
                 self.end_conversation("quiet")
@@ -820,9 +823,12 @@ class Mind:
                 self.end_session("quiet")
             phrase = gate.feed(frame)
             if phrase:
-                t = time.monotonic()
+                t, by = time.monotonic(), None
                 try:
-                    called = self.transcribe(phrase)
+                    if in_convo:                      # no name needed in a conversation: one pass, the better model
+                        called, by = self.hear(phrase)
+                    else:                             # waiting for the name: the rover's base only
+                        called = self.transcribe(phrase)
                 except Exception as e:
                     self.journal.write("error", where="stt", error=str(e))
                     called = ""
@@ -831,22 +837,19 @@ class Mind:
                 woke, question = split_wake(called)
                 if self.a.log_phrases and not woke:
                     print(json.dumps({"kind": "phrase", "text": called}, ensure_ascii=False), flush=True)
-                by = None
                 if woke:
                     source = "name"
-                    if is_speech(question):            # the question came in the same breath: hear it again, better
+                    if not is_speech(question):
+                        question = ""
+                    elif by is None:                   # base heard the name and a question in one breath: hear it again
                         again, by = self.hear(phrase)
                         named, rest = split_wake(again)
                         question = rest if named else again
-                    else:
-                        question = ""
-                elif in_convo and (is_end(called) or is_speech(called)):
-                    again, by = self.hear(phrase)
-                    if is_end(again):
-                        self.end_conversation("said: " + again.strip())
-                    elif is_speech(again):
-                        woke, source, question = True, "follow-up", again
-                        self.counts["follow_ups"] += 1
+                elif in_convo and is_end(called):
+                    self.end_conversation("said: " + called.strip())
+                elif in_convo and is_speech(called):
+                    woke, source, question = True, "follow-up", called
+                    self.counts["follow_ups"] += 1
             if woke or self.wake.is_set():
                 self.wake.clear()
                 self.counts["wakes"] += 1
