@@ -703,6 +703,15 @@ planned design: the rover's base decides, turbo only rewrites the question). The
 about 2.6 s per question; `-ac 512` brings it to about 0.8 s with a repetition risk (whisper.cpp
 documents reduced audio context as a speed/quality trade).
 
+## Rules for misheard words and the time (2026-11-07, Gemma 4 E2B on the Mac mini)
+
+Two sentences added to `rules.md` (ask again when Paul's words make no sense; say the exact time from
+"Right now"). Live system prompt, temperature 0.9, three answers each: "지금 몇 시야?" and "What time is it?"
+gave the exact time 6/6 ("저녁 8시 3분이야", "It's 8:03 in the evening"; before, "지금 토요일 저녁이야").
+After a time question, "7C2000뿐이라고." got "응? 잘 못 들었어, 다시 말해 줄래?" 3/3 (before: "C2000? 무슨
+게임이야?"). Mishearings that read as normal sentences still pass: "720,000 won." was taken as money 3/3,
+"It's a good bye." as goodbye 3/3. An ordinary sentence ("내일 누나가 와.") was answered normally 3/3.
+
 ## Pan-tilt settle correction (2026-11-07, Jetson on the rover)
 
 Before: "Center" (T:133 to 0/0) left the ST3215 head at +1.0 or -1.1 deg pan depending on the
