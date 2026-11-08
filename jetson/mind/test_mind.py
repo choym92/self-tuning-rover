@@ -373,6 +373,29 @@ class KoreanTests(unittest.TestCase):
         self.assertEqual(mind.split_wake("칼만아 배고파?"), (True, "배고파?"))
         self.assertEqual(mind.split_wake("칼만"), (True, ""))
         self.assertEqual(mind.split_wake("칼만은?"), (True, ""))
+        self.assertEqual(mind.split_wake("Kalman아 일어나."), (True, "일어나."))
+        self.assertEqual(mind.split_wake("Kalmana 일어나."), (True, "일어나."))     # "칼만아" in Whisper's spelling
+        self.assertEqual(mind.split_wake("웃긴게 내가 Kalman아 일어나."), (False, ""))   # the name must come first
+
+    def test_other_languages_are_transcribed_again_as_korean_or_english(self):
+        import types
+        m = mind.Mind.__new__(mind.Mind)
+        m.a = types.SimpleNamespace(language="auto")
+        calls = []
+
+        def whisper(wav, language):
+            calls.append(language)
+            if language == "auto":
+                return {"text": " 次はカルマナ", "detected_language": "japanese",
+                        "language_probabilities": {"ja": 0.5, "ko": 0.3, "en": 0.1}}
+            return {"text": " 칼만아 일어나.", "detected_language": "korean"}
+        m.whisper = whisper
+        self.assertEqual(m.transcribe(b"\0\0" * 160), "칼만아 일어나.")
+        self.assertEqual(calls, ["auto", "ko"])
+        calls.clear()
+        m.whisper = lambda wav, language: calls.append(language) or {"text": " Hey Kalman.", "detected_language": "english"}
+        self.assertEqual(m.transcribe(b"\0\0" * 160), "Hey Kalman.")
+        self.assertEqual(calls, ["auto"])
         self.assertEqual(mind.split_wake("칼만필터 공부했어"), (False, ""))
         self.assertEqual(mind.split_wake("Hey Kalman, what time is it?"), (True, "what time is it?"))
         for text, end in (("고마워", True), ("그만!", True), ("잘 자", True), ("고마워 근데 하나만 더 물어볼게 오늘 날씨는 어때", False),

@@ -45,7 +45,7 @@ INVENTED = re.compile(r"^\W*(thank(s| you)( so much| very much)?( for (watching|
                       r"시청해\s*주셔서\s*감사합니다.*|구독과?\s*좋아요.*|MBC\s*뉴스.*)\W*$", re.I)
 
 
-NAME = re.compile(r"^\W*(?:(?:hey|hi|hello|ok|okay|yo)\W+)?kalman\b\W*|"
+NAME = re.compile(r"^\W*(?:(?:hey|hi|hello|ok|okay|yo)\W+)?kalman(?:a|ah|아|야|은|는|이)?\b\W*|"
                   # with Korean on, Whisper may write the name in Hangul ("헤이 칼만", "칼만아", "칼만은?")
                   r"^\W*(?:(?:헤이|하이|오케이|야)\W*)?(?:칼만|칼먼|캘먼|칼맨)(?:아|야|은|는|이)?(?![가-힣])\W*", re.I)
 
@@ -457,12 +457,23 @@ class Mind:
         self.memory.start()
 
     # --- services -------------------------------------------------------------------------
-    def transcribe(self, pcm):
-        body, ctype = multipart({"temperature": "0", "language": self.a.language, "response_format": "json",
-                                 "prompt": WHISPER_PROMPT}, wav_bytes(pcm))
+    def whisper(self, wav, language):
+        body, ctype = multipart({"temperature": "0", "language": language, "response_format": "verbose_json",
+                                 "prompt": WHISPER_PROMPT}, wav)
         req = urllib.request.Request(self.a.stt + "/inference", data=body, headers={"Content-Type": ctype})
         with urllib.request.urlopen(req, timeout=30) as r:
-            return json.loads(r.read()).get("text", "").strip()
+            return json.loads(r.read())
+
+    def transcribe(self, pcm):
+        """Whisper base picks the language itself and on short Korean phrases sometimes picks Japanese or
+        Spanish ("칼만아 일어나" came out in katakana, 2026-11-07). Kalman only hears Korean and English, so
+        any other language is transcribed again as whichever of the two scored higher."""
+        wav = wav_bytes(pcm)
+        r = self.whisper(wav, self.a.language)
+        if self.a.language == "auto" and r.get("detected_language") not in (None, "english", "korean"):
+            probs = r.get("language_probabilities") or {}
+            r = self.whisper(wav, "ko" if probs.get("ko", 0) >= probs.get("en", 0) else "en")
+        return r.get("text", "").strip()
 
     def state_line(self):
         """'Right now' facts filled in for every reply, so the model talks about the real battery, not a script."""
@@ -792,6 +803,8 @@ class Mind:
                 self.counts["phrases"] += 1
                 self.counts["whisper_ms"] += round((time.monotonic() - t) * 1000)
                 woke, question = split_wake(called)
+                if self.a.log_phrases and not woke:
+                    print(json.dumps({"kind": "phrase", "text": called}, ensure_ascii=False), flush=True)
                 if woke:
                     source = "name"
                     question = question if is_speech(question) else ""
@@ -912,6 +925,8 @@ def main():
     ap.add_argument("--hosts", nargs="+", default=["127.0.0.1", "172.18.0.1"],
                     help="where the control port listens: loopback and the 'rover' docker network gateway")
     ap.add_argument("--vad-model", default="/models/sherpa/silero_vad.onnx")
+    ap.add_argument("--log-phrases", action="store_true",
+                    help="print phrases that did not wake Kalman to the container log (never the journal), for wake tuning")
     args = ap.parse_args()
     mind = Mind(args)
     control_server(mind, args.port, args.hosts)

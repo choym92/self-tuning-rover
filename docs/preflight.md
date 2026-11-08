@@ -403,3 +403,46 @@ Reversibility: step 3 is removed with `rm -rf ~/rover-brain`. OpenClaw, Araverus
 Adversarial review: done on 2026-11-07 (first proposal refuted, this one is its recommendation).
 
 Outcome: step 3 done 2026-11-07 16:20 EST. Engine and model copied to `~/rover-brain` (both sha256 checked), served on the mini's loopback by hand, Metal confirmed, answers and harness scores identical to the Jetson, generation twice as fast (`docs/verify.md`). The temporary server was stopped afterwards; nothing else on the mini changed. Step 4 done the same day 16:35 EST: LaunchAgent `macmini/ai.rover.brain.plist` in `~/Library/LaunchAgents/`, loopback 8080, `--no-webui` (`/` answers 404); first reply 50.9 tok/s; after `kill -9` launchd restarted it within 12 s (runs = 2) and `/health` answered again; mini memory free 66 %. A reboot (FileVault unlock and login needed) is not tested. Step 5 done 16:28-16:35 EST: key `rover-brainlink` made on the Jetson (`/home/paulcho/brainlink/`, host key pinned, fingerprint matched the mini's own `ssh_host_ed25519_key.pub`); the mini's line is `restrict,port-forwarding,command="/usr/bin/false",from="192.168.1.*",permitopen="127.0.0.1:8080",permitlisten="127.0.0.1:1"` (backup `~/.ssh/authorized_keys.before-brainlink`). Tested from the Jetson with that key: a command returns rc 1, the Gemma forward answers `/health`, a forward to OpenClaw's 18789 is "administratively prohibited", and a reverse forward is refused (rc 255). Without `permitlisten` the mini had granted `-R` ("remote forward success"), so the dummy `permitlisten` on port 1 is required. `from` is the whole home subnet until Paul reserves the Jetson's address. Container `rover-brainlink` (`jetson/brainlink/`, alpine 3.20 + openssh-client, 13.8 MB) on a new docker network `rover`, published on Jetson loopback 18080; `rover-control` joined `rover` live (no restart) and reaches `rover-brainlink:8080`. Killing the mini's sshd session: back in about 3 s. Step 6 done 16:45 EST: `docker stop rover-llm` (kept, not removed), 8080 free, `rover-brainlink` recreated on Jetson loopback 8080; `talk.py`'s `ask_llm` answered in English and Korean through it (1.2-1.6 s from the MacBook, the mini's log shows the requests at 55 tok/s). Jetson memory available 1,639 -> 4,554 MiB (+2.85 GiB; `docker stats` had shown 3.84 GiB for rover-llm). Step 7 done 16:55 EST: rover-control polls `http://rover-brainlink:8080/health` every 2 s (read-only; `--brain`), shows `BRAIN ok/off` and a folded Servers row (brain latency, Jetson memory, hottest thermal zone); 20 tests pass. On the rover: brain ok 118-737 ms; `docker stop rover-brainlink` gave `BRAIN off` (unreachable) within 5 s while drive stayed allowed and a drive command was accepted; after `docker start` it was ok again in 5 s. `talk.py` now gives up on the LLM after 30 s and plays a pre-rendered line from `~/voice/brain_offline_{en,ko}.wav` on the rover (tested without sound against a dead port: gave up in 0.7 s). Not tested: a real Mac mini outage or restart.
+
+## Whisper large-v3-turbo on the home Mac mini for Kalman's questions (2026-11-07, written before running)
+
+Goal: Whisper base on the rover mishears Paul's Korean (live journal 2026-11-07: "720,000 won", "7C2000뿐이라고", "It's a good bye" for Korean sentences). Paul chose (same evening) to keep wake detection on the rover's base and transcribe only what follows a wake, and follow-ups, with a larger model on the Mac mini, where Gemma already runs; the rover's base stays the fallback.
+
+Exact versions: Mac mini M4, 16 GB, macOS 26.4, user `paul`; whisper.cpp v1.9.4 (tag commit `927cfce34f31707e17f2bff35c349632fb9e2c3a`, the version of the rover's `rover/whisper:v1.9.4`, so the `verbose_json` fields `mind.py` reads are the same); build tool cmake 4.4.4 from PyPI (`cmake-4.4.4-py3-none-macosx_10_10_universal2.whl`, sha256 `883962a72b1b3a16ff445427f24c8caca9797dd9e563bbe208cbcd89e877f9d3`) in a venv inside the work folder; model `ggml-large-v3-turbo.bin` (f16, 1,624,555,275 bytes, sha256 `1fc70f774d38eb169993ac391eea357ef47c88757ef72ee5943879b7e8e2bc69`) from `ggerganov/whisper.cpp` revision `5359861c739e955e79d9a303bcbc70fb988958b1`.
+
+Official sources: [whisper.cpp releases](https://github.com/ggml-org/whisper.cpp/releases) (v1.9.4 2026-09-11; v1.9.5 2026-10-06 adds Metal changes; no macOS binaries are published, only an xcframework, so it is built from source), [server README at v1.9.4](https://github.com/ggml-org/whisper.cpp/blob/v1.9.4/examples/server/README.md) (`--host` defaults to 127.0.0.1, `-l auto`), [model repository](https://huggingface.co/ggerganov/whisper.cpp).
+
+Known issues: no whisper-server or Metal crash reported for v1.9 on macOS 26 in a search; an Ollama write-up about a macOS 26 Metal bug notes whisper.cpp works on the same machine. A community macOS binary exists (`ghsnyc/whisper-cpp-macos-bin`) and is not used. Homebrew is not used, as for llama.cpp; the mini's existing Homebrew `openai-whisper` (another project's) is not touched.
+
+| Assumption | Evidence | Label |
+|---|---|---|
+| Room on the mini | 81 % memory free, 91 GiB disk free | VERIFIED |
+| Compiler present, cmake missing | Apple clang 17 (Command Line Tools), git, make; no `cmake` | VERIFIED |
+| Port free | listeners: 8080 llama-server, 8093 voice, OpenClaw 18789/18791, system ports; 8098 free | VERIFIED |
+| The tunnel key allows only 8080 and 8093 | `permitopen="127.0.0.1:8080",permitopen="127.0.0.1:8093"` | VERIFIED; a third `permitopen` is a later step |
+| turbo is better than base for Korean | third-party figures only (FLEURS CER about 5.2 % turbo; small 18 % on KsponSpeech) | INFERENCE until measured here |
+| turbo fast enough on M4 Metal | MacBook 0.7 s per 5 s clip earlier today; third-party M4 about 1 s | INFERENCE until measured |
+| Metal used by a static build | default `GGML_METAL=ON` with the embedded shader library on macOS | INFERENCE until the log shows it |
+
+Steps, each with Paul's go: (1) build and download into `~/rover-brain/hearing/`, run by hand on loopback 18098, measure base vs turbo on the same clips, stop it; (2) LaunchAgent `ai.rover.hearing` on loopback 8098; (3) add `permitopen="127.0.0.1:8098"` to the brainlink key line (backup first) and a third forward in `rover-brainlink`; (4) `mind.py` sends the question audio to the mini, falls back to the rover's base, logs both during the trial.
+
+Commands for step 1 (run on the mini as `paul`; nothing outside `~/rover-brain/hearing`):
+
+```
+mkdir -p ~/rover-brain/hearing/models && cd ~/rover-brain/hearing
+/usr/bin/python3 -m venv buildenv
+echo "cmake==4.4.4 --hash=sha256:883962a72b1b3a16ff445427f24c8caca9797dd9e563bbe208cbcd89e877f9d3" > cmake-req.txt
+buildenv/bin/pip install --require-hashes -r cmake-req.txt
+git clone --depth 1 --branch v1.9.4 https://github.com/ggml-org/whisper.cpp src
+test "$(git -C src rev-parse HEAD)" = 927cfce34f31707e17f2bff35c349632fb9e2c3a
+buildenv/bin/cmake -S src -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DWHISPER_BUILD_TESTS=OFF
+buildenv/bin/cmake --build build -j 8 --target whisper-server
+curl -L -o models/ggml-large-v3-turbo.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-large-v3-turbo.bin
+echo "1fc70f774d38eb169993ac391eea357ef47c88757ef72ee5943879b7e8e2bc69  models/ggml-large-v3-turbo.bin" | shasum -a 256 -c
+```
+
+Reversibility: `rm -rf ~/rover-brain/hearing` removes everything from step 1. Gemma, the voice, OpenClaw and the rover are not touched until steps 3-4; until then the rover keeps using its own base.
+
+Adversarial review: not run; step 1 adds files in one folder on a machine that is not the robot, and nothing listens beyond loopback.
+
+Outcome: step 1 done 2026-11-07 19:40-20:05 EST. cmake 4.4.4 installed in `~/rover-brain/hearing/buildenv` (hash-checked), source at commit `927cfce` (checked), static `whisper-server` built (links only system frameworks: Metal, Accelerate, Foundation), model sha256 OK. Run by hand on loopback 18098: Metal used (`use gpu = 1`, embedded shader library, flash attention on; first start compiles Metal kernels for about 16 s). Measurements in `docs/verify.md`; the test server was stopped afterwards and nothing else on the mini changed.

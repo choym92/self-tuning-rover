@@ -682,6 +682,27 @@ but shortened details ("her name, Jimin" without "sister"). 0.9-1.6 s per summar
 Earlier the same day (section above): large-v3-turbo wrote the name right on 4/6 of Paul's English clips
 against 6/6 for base with the prompt, and invented "Hey Kalman." on a quiet clip.
 
+## Whisper large-v3-turbo on the Mac mini against base on the rover (2026-11-07)
+
+Same 24 clips, the way `rover-mind` asks (auto language, name prompt, `verbose_json`): Paul's six English
+mic-test phrases at 1 m and five wake clips (rover microphone), one quiet clip, and twelve Korean
+sentences in Supertonic's voice M1. turbo f16 on the mini's Metal (whisper.cpp v1.9.4, flash attention
+on), base on the Jetson's CUDA.
+
+| Model | Time per clip | Paul's English (6 phrases) | Quiet clip | Korean (synthetic, 12) |
+|---|---|---|---|---|
+| base, rover | 0.22-0.47 s | name 4/4 where spoken; "How was your battery?"; dropped "Hey Kalman" twice | `[BLANK_AUDIO]` | 11/12 right ("Kalmana" for 칼만아) |
+| turbo, mini, full 30 s window | 2.55-2.64 s, every clip | all six with the name; "how is your battery" right | invented "Hey Kalman." | 12/12 right |
+| turbo, mini, `-ac 512` (about 10 s window) | 0.76-0.85 s | same as above | invented "Hey Kalman." | 12/12, but one repeated three times ("지금 몇 시야?" x3) |
+
+Reading: the synthetic Korean is too clean to separate the models (base got it right too); the failures
+seen live came from Paul's own Korean through the rover microphone ("7시 23분이라고" → "7C2000뿐이라고",
+"720,000 won"), which this set does not contain. turbo writes Paul's English more completely, but with
+the name prompt it invents the name on silence, so it must not decide wake-up (it does not in the
+planned design: the rover's base decides, turbo only rewrites the question). The full window costs
+about 2.6 s per question; `-ac 512` brings it to about 0.8 s with a repetition risk (whisper.cpp
+documents reduced audio context as a speed/quality trade).
+
 ## Pan-tilt settle correction (2026-11-07, Jetson on the rover)
 
 Before: "Center" (T:133 to 0/0) left the ST3215 head at +1.0 or -1.1 deg pan depending on the
